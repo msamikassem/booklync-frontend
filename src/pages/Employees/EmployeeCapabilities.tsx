@@ -120,12 +120,19 @@ export function EmployeeCapabilities({ empId, agentId, canEdit }: { empId: numbe
         ...(p.type === "variation" && { variation_id: p.id }),
         extra_price: p.extraPrice,
       })));
-      await Promise.all([...pendingUpdate.entries()].map(([capId, extra]) =>
-        employeesApi.addCapability(empId, agentId, {
-          ...((() => { const c = caps.find(x => x.id === capId)!; return c.title_id ? { title_id: c.title_id } : c.service_id ? { service_id: c.service_id } : { variation_id: c.variation_id! }; })()),
+      // Price updates: delete first, then re-add with new extra_price
+      // (no PATCH endpoint — replace pattern; must be sequential per cap)
+      for (const [capId, extra] of pendingUpdate.entries()) {
+        const c = caps.find(x => x.id === capId);
+        if (!c) continue;
+        await employeesApi.removeCapability(empId, agentId, capId);
+        await employeesApi.addCapability(empId, agentId, {
+          ...(c.title_id != null     ? { title_id: c.title_id }         : {}),
+          ...(c.service_id != null   ? { service_id: c.service_id }     : {}),
+          ...(c.variation_id != null ? { variation_id: c.variation_id } : {}),
           extra_price: extra,
-        }).then(async () => { await employeesApi.removeCapability(empId, agentId, capId); })
-      ));
+        });
+      }
       setPendingAdd([]); setPendingRemove(new Set()); setPendingUpdate(new Map());
       invalidate(); showToast("Capabilities saved.");
     } catch { setErr("Could not save changes."); }
