@@ -1,0 +1,63 @@
+/** @type {import('tailwindcss').Config} */
+export default {
+  darkMode: ["class"],
+  content: [
+    "./index.html",
+    "./src/**/*.{ts,tsx}",
+  ],
+  theme: {
+    extend: {
+      colors: {
+        primary: {
+          DEFAULT: "#2563EB",
+          hover: "#1D4ED8",
+          active: "#1E40AF",
+        },
+        accent: "#7C3AED",
+        canvas: "#ffffff",
+        "surface-soft": "#f8f9fa",
+        "surface-card": "#F8FAFC",
+        "surface-strong": "#e5e7eb",
+        "surface-dark": "#0F172A",
+        "surface-dark-elevated": "#1a2236",
+        hairline: "#e5e7eb",
+        "hairline-soft": "#f3f4f6",
+        ink: "#0F172A",
+        "ink-blue": "#2563EB",
+        body: "#374151",
+        muted: "#6b7280",
+        "muted-soft": "#898989",
+        "on-primary": "#ffffff",
+        "on-dark": "#ffffff",
+        "on-dark-soft": "#94a3b8",
+        success: "#10b981",
+        warning: "#f59e0b",
+        error: "#ef4444",
+        "badge-orange": "#fb923c",
+        "badge-pink": "#ec4899",
+        "badge-violet": "#8b5cf6",
+        "badge-emerald": "#34d399",
+      },
+      fontFamily: {
+        display: ["Satoshi", "Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
+        body: ["Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
+        mono: ["JetBrains Mono", "ui-monospace", "SF Mono", "Menlo", "monospace"],
+      },
+      borderRadius: {
+        sm: "6px",
+        md: "8px",
+        lg: "12px",
+        xl: "16px",
+        "2xl": "20px",
+        pill: "9999px",
+      },
+      boxShadow: {
+        sm: "0 1px 2px rgba(15,23,42,0.06)",
+        md: "0 4px 12px rgba(15,23,42,0.08)",
+        lg: "0 20px 50px -12px rgba(15,23,42,0.18)",
+        blue: "0 20px 50px -12px rgba(37,99,235,0.25)",
+      },
+    },
+  },
+  plugins: [],
+}
