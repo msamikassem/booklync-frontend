@@ -24,6 +24,13 @@ export type CustomerUpdate = components["schemas"]["CustomerUpdate"];
 export type AppointmentDetailResponse = components["schemas"]["AppointmentDetailResponse"];
 export type AppointmentStatus = components["schemas"]["AppointmentStatusEnum"];
 
+// Agents
+export type AgentUpdate = components["schemas"]["AgentUpdate"];
+
+// Business Hours / Days Off
+export type BusinessHourResponse = components["schemas"]["BusinessHourResponse"];
+export type BusinessHourCreate = components["schemas"]["BusinessHourCreate"];
+
 // Services
 export type ServiceResponse = components["schemas"]["ServiceResponse"];
 export type ServiceVariationResponse = components["schemas"]["ServiceVariationResponse"];

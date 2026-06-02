@@ -8,6 +8,7 @@ import type {
   UserMeResponse,
   AgentListResponse,
   AgentResponse,
+  AgentUpdate,
   CustomerResponse,
   CustomerListResponse,
   CustomerCreate,
@@ -18,6 +19,8 @@ import type {
   ServiceVariationResponse,
   ServiceTitleResponse,
   ServiceCreate,
+  BusinessHourResponse,
+  BusinessHourCreate,
 } from "./types";
 
 // ── Auth ──────────────────────────────────────────────────────────
@@ -74,6 +77,71 @@ export const agents = {
     const res = await apiFetch(`/agents/${agentId}`);
     if (!res.ok) throw new Error("Failed to load branch");
     return res.json();
+  },
+
+  async create(body: Omit<AgentUpdate, "currency" | "tax_rate" | "tax_inclusive"> & { agent_name: string; phone_number: string; location_name: string; timezone: string; model: string }): Promise<AgentResponse> {
+    const res = await apiFetch("/agents/", { method: "POST", body: JSON.stringify(body) });
+    if (!res.ok) { const d = await res.json(); throw Object.assign(new Error("Create failed"), { data: d }); }
+    return res.json();
+  },
+
+  async update(id: number, body: AgentUpdate): Promise<AgentResponse> {
+    const res = await apiFetch(`/agents/${id}`, { method: "PUT", body: JSON.stringify(body) });
+    if (!res.ok) { const d = await res.json(); throw Object.assign(new Error("Update failed"), { data: d }); }
+    return res.json();
+  },
+
+  async delete(id: number): Promise<void> {
+    const res = await apiFetch(`/agents/${id}`, { method: "DELETE" });
+    if (!res.ok) { const d = await res.json(); throw Object.assign(new Error("Delete failed"), { data: d }); }
+  },
+};
+
+// ── Business Hours ─────────────────────────────────────────────────────────────
+
+export const businessHours = {
+  async list(agentId: number): Promise<BusinessHourResponse[]> {
+    const res = await apiFetch(`/business-hours/?agent_id=${agentId}`);
+    if (!res.ok) throw new Error("Failed to load hours");
+    const d = await res.json();
+    return d.business_hours ?? [];
+  },
+
+  async set(agentId: number, hours: BusinessHourCreate[]): Promise<BusinessHourResponse[]> {
+    const res = await apiFetch("/business-hours/", {
+      method: "POST",
+      body: JSON.stringify({ agent_id: agentId, business_hours: hours }),
+    });
+    if (!res.ok) { const d = await res.json(); throw Object.assign(new Error("Save failed"), { data: d }); }
+    const d = await res.json();
+    return d.business_hours ?? [];
+  },
+};
+
+// ── Days Off (branch closures) ────────────────────────────────────────────────
+
+export interface DayOff { id: number; agent_id: number; employee_id: number | null; name: string; start_date: string; end_date: string; }
+
+export const daysOff = {
+  async list(agentId: number): Promise<DayOff[]> {
+    const res = await apiFetch(`/days-off/?agent_id=${agentId}`);
+    if (!res.ok) throw new Error("Failed to load days off");
+    const d = await res.json();
+    return (d.days_off ?? []).filter((x: DayOff) => x.employee_id == null);
+  },
+
+  async create(agentId: number, body: { name: string; start_date: string; end_date: string }): Promise<DayOff> {
+    const res = await apiFetch("/days-off/", {
+      method: "POST",
+      body: JSON.stringify({ agent_id: agentId, ...body }),
+    });
+    if (!res.ok) { const d = await res.json(); throw Object.assign(new Error("Create failed"), { data: d }); }
+    return res.json();
+  },
+
+  async delete(id: number, agentId: number): Promise<void> {
+    const res = await apiFetch(`/days-off/${id}?agent_id=${agentId}`, { method: "DELETE" });
+    if (!res.ok) { const d = await res.json(); throw Object.assign(new Error("Delete failed"), { data: d }); }
   },
 };
 

@@ -9,6 +9,7 @@ import Login from "./pages/Login";
 import Overview from "./pages/Overview";
 import Customers from "./pages/Customers";
 import Services from "./pages/Services";
+import Branches from "./pages/Branches";
 import Placeholder from "./pages/Placeholder";
 
 const queryClient = new QueryClient({
@@ -39,7 +40,7 @@ function AppRoutes() {
           <Route path="customers" element={<Customers />} />
           <Route path="appointments" element={<Placeholder name="Appointments" />} />
           <Route path="calendar" element={<Placeholder name="Calendar" />} />
-          <Route path="branches" element={<Placeholder name="Branches" />} />
+          <Route path="branches" element={<Branches />} />
           <Route path="employees" element={<Placeholder name="Employees" />} />
           <Route path="services" element={<Services />} />
           <Route path="sales" element={<Placeholder name="Sales" />} />
