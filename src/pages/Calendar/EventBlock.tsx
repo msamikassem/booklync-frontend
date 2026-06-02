@@ -76,6 +76,7 @@ export function EventBlock({ appt, pxPerMin, startHour, hourCount, todayBreaks, 
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
       >
+        <span className={`cal-ev-status-dot cal-ev-status-dot--${status}`} />
         <div className="cal-ev-inner">
           <span className="cal-ev-time">{timeStr}</span>
           <span className="cal-ev-name">{appt.customer_name ?? "Customer"}</span>
