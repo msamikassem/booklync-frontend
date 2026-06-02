@@ -8,6 +8,7 @@ import DashboardShell from "./components/layout/DashboardShell";
 import Login from "./pages/Login";
 import Overview from "./pages/Overview";
 import Customers from "./pages/Customers";
+import Services from "./pages/Services";
 import Placeholder from "./pages/Placeholder";
 
 const queryClient = new QueryClient({
@@ -40,7 +41,7 @@ function AppRoutes() {
           <Route path="calendar" element={<Placeholder name="Calendar" />} />
           <Route path="branches" element={<Placeholder name="Branches" />} />
           <Route path="employees" element={<Placeholder name="Employees" />} />
-          <Route path="services" element={<Placeholder name="Services" />} />
+          <Route path="services" element={<Services />} />
           <Route path="sales" element={<Placeholder name="Sales" />} />
           <Route path="team" element={<Placeholder name="Team" />} />
           <Route path="booking-page" element={<Placeholder name="Booking Page" />} />

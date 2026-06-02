@@ -13,6 +13,11 @@ import type {
   CustomerCreate,
   CustomerUpdate,
   AppointmentDetailResponse,
+  ServiceCatalogueResponse,
+  ServiceResponse,
+  ServiceVariationResponse,
+  ServiceTitleResponse,
+  ServiceCreate,
 } from "./types";
 
 // ── Auth ──────────────────────────────────────────────────────────
@@ -126,5 +131,94 @@ export const customers = {
     if (!res.ok) throw new Error("Failed to load appointment history");
     const data = await res.json();
     return data.appointments ?? [];
+  },
+};
+
+// ── Services ──────────────────────────────────────────────────────────────────
+
+export const services = {
+  async catalogue(agentId: number): Promise<ServiceCatalogueResponse> {
+    const res = await apiFetch(`/services/catalogue?agent_id=${agentId}`);
+    if (!res.ok) throw new Error("Failed to load catalogue");
+    return res.json();
+  },
+
+  async create(body: ServiceCreate): Promise<ServiceResponse> {
+    const res = await apiFetch("/services/", { method: "POST", body: JSON.stringify(body) });
+    if (!res.ok) { const d = await res.json(); throw Object.assign(new Error("Create failed"), { data: d }); }
+    return res.json();
+  },
+
+  async update(id: number, agentId: number, body: Record<string, unknown>): Promise<ServiceResponse> {
+    const res = await apiFetch(`/services/${id}?agent_id=${agentId}`, { method: "PUT", body: JSON.stringify(body) });
+    if (!res.ok) { const d = await res.json(); throw Object.assign(new Error("Update failed"), { data: d }); }
+    return res.json();
+  },
+
+  async delete(id: number, agentId: number): Promise<void> {
+    const res = await apiFetch(`/services/${id}?agent_id=${agentId}`, { method: "DELETE" });
+    if (!res.ok) { const d = await res.json(); throw Object.assign(new Error("Delete failed"), { data: d }); }
+  },
+
+  async activate(id: number, agentId: number): Promise<ServiceResponse> {
+    const res = await apiFetch(`/services/${id}/activate?agent_id=${agentId}`, { method: "PATCH" });
+    if (!res.ok) throw new Error("Failed");
+    return res.json();
+  },
+
+  async deactivate(id: number, agentId: number): Promise<ServiceResponse> {
+    const res = await apiFetch(`/services/${id}/deactivate?agent_id=${agentId}`, { method: "PATCH" });
+    if (!res.ok) throw new Error("Failed");
+    return res.json();
+  },
+
+  async addVariation(svcId: number, agentId: number, body: { name: string; price: number; duration_minutes: number }): Promise<ServiceVariationResponse> {
+    const res = await apiFetch(`/services/${svcId}/variations/?agent_id=${agentId}`, { method: "POST", body: JSON.stringify(body) });
+    if (!res.ok) { const d = await res.json(); throw Object.assign(new Error("Add variation failed"), { data: d }); }
+    return res.json();
+  },
+
+  async updateVariation(svcId: number, varId: number, agentId: number, body: Record<string, unknown>): Promise<ServiceVariationResponse> {
+    const res = await apiFetch(`/services/${svcId}/variations/${varId}?agent_id=${agentId}`, { method: "PUT", body: JSON.stringify(body) });
+    if (!res.ok) { const d = await res.json(); throw Object.assign(new Error("Update variation failed"), { data: d }); }
+    return res.json();
+  },
+
+  async deleteVariation(svcId: number, varId: number, agentId: number): Promise<void> {
+    const res = await apiFetch(`/services/${svcId}/variations/${varId}?agent_id=${agentId}`, { method: "DELETE" });
+    if (!res.ok) throw new Error("Delete variation failed");
+  },
+
+  async activateVariation(svcId: number, varId: number, agentId: number): Promise<ServiceVariationResponse> {
+    const res = await apiFetch(`/services/${svcId}/variations/${varId}/activate?agent_id=${agentId}`, { method: "PATCH" });
+    if (!res.ok) throw new Error("Failed");
+    return res.json();
+  },
+
+  async deactivateVariation(svcId: number, varId: number, agentId: number): Promise<ServiceVariationResponse> {
+    const res = await apiFetch(`/services/${svcId}/variations/${varId}/deactivate?agent_id=${agentId}`, { method: "PATCH" });
+    if (!res.ok) throw new Error("Failed");
+    return res.json();
+  },
+};
+
+// ── Titles ────────────────────────────────────────────────────────────────────
+
+export const titles = {
+  async create(body: { agent_id: number; name: string }): Promise<ServiceTitleResponse> {
+    const res = await apiFetch("/services/titles/", { method: "POST", body: JSON.stringify(body) });
+    if (!res.ok) { const d = await res.json(); throw Object.assign(new Error("Create failed"), { data: d }); }
+    return res.json();
+  },
+
+  async update(id: number, agentId: number, body: { name?: string; sort_order?: number }): Promise<ServiceTitleResponse> {
+    const res = await apiFetch(`/services/titles/${id}?agent_id=${agentId}`, { method: "PUT", body: JSON.stringify(body) });
+    if (!res.ok) { const d = await res.json(); throw Object.assign(new Error("Update failed"), { data: d }); }
+    return res.json();
+  },
+
+  async delete(id: number, agentId: number): Promise<void> {
+    const res = await apiFetch(`/services/titles/${id}?agent_id=${agentId}`, { method: "DELETE" });
+    if (!res.ok) { const d = await res.json(); throw Object.assign(new Error("Delete failed"), { data: d }); }
   },
 };
