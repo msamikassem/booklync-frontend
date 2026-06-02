@@ -192,7 +192,7 @@ export function calServiceColorClass(appt: AppointmentDetailResponse): string {
 export function calSvcColorStyle(hex: string | null | undefined): string {
   if (!hex || !/^#[0-9a-fA-F]{6}$/.test(hex)) return "";
   const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
-  const pr=Math.round(r*0.55+255*0.45), pg=Math.round(g*0.55+255*0.45), pb=Math.round(b*0.55+255*0.45);
+  const pr=Math.round(r*0.75+255*0.25), pg=Math.round(g*0.75+255*0.25), pb=Math.round(b*0.75+255*0.25);
   return `rgb(${pr},${pg},${pb})`;
 }
 
