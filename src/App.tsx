@@ -7,6 +7,7 @@ import RouteGuard from "./components/layout/RouteGuard";
 import DashboardShell from "./components/layout/DashboardShell";
 import Login from "./pages/Login";
 import Overview from "./pages/Overview";
+import Customers from "./pages/Customers";
 import Placeholder from "./pages/Placeholder";
 
 const queryClient = new QueryClient({
@@ -34,7 +35,7 @@ function AppRoutes() {
           }
         >
           <Route index element={<Overview />} />
-          <Route path="customers" element={<Placeholder name="Customers" />} />
+          <Route path="customers" element={<Customers />} />
           <Route path="appointments" element={<Placeholder name="Appointments" />} />
           <Route path="calendar" element={<Placeholder name="Calendar" />} />
           <Route path="branches" element={<Placeholder name="Branches" />} />

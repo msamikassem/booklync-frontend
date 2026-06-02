@@ -12,6 +12,7 @@ import type {
   CustomerListResponse,
   CustomerCreate,
   CustomerUpdate,
+  AppointmentDetailResponse,
 } from "./types";
 
 // ── Auth ──────────────────────────────────────────────────────────
@@ -74,24 +75,22 @@ export const agents = {
 // ── Customers ─────────────────────────────────────────────────────
 
 export const customers = {
-  async list(agentId: number, params?: { search?: string; page?: number; page_size?: number }): Promise<CustomerListResponse> {
-    const qs = new URLSearchParams({ agent_id: String(agentId) });
+  async list(params?: { search?: string }): Promise<CustomerListResponse> {
+    const qs = new URLSearchParams();
     if (params?.search) qs.set("search", params.search);
-    if (params?.page != null) qs.set("page", String(params.page));
-    if (params?.page_size != null) qs.set("page_size", String(params.page_size));
     const res = await apiFetch(`/customers/?${qs}`);
     if (!res.ok) throw new Error("Failed to load customers");
     return res.json();
   },
 
-  async get(id: number, agentId: number): Promise<CustomerResponse> {
-    const res = await apiFetch(`/customers/${id}?agent_id=${agentId}`);
+  async get(id: number): Promise<CustomerResponse> {
+    const res = await apiFetch(`/customers/${id}`);
     if (!res.ok) throw new Error("Failed to load customer");
     return res.json();
   },
 
-  async create(agentId: number, body: CustomerCreate): Promise<CustomerResponse> {
-    const res = await apiFetch(`/customers/?agent_id=${agentId}`, {
+  async create(body: CustomerCreate): Promise<CustomerResponse> {
+    const res = await apiFetch("/customers/", {
       method: "POST",
       body: JSON.stringify(body),
     });
@@ -102,8 +101,8 @@ export const customers = {
     return res.json();
   },
 
-  async update(id: number, agentId: number, body: CustomerUpdate): Promise<CustomerResponse> {
-    const res = await apiFetch(`/customers/${id}?agent_id=${agentId}`, {
+  async update(id: number, body: CustomerUpdate): Promise<CustomerResponse> {
+    const res = await apiFetch(`/customers/${id}`, {
       method: "PUT",
       body: JSON.stringify(body),
     });
@@ -114,11 +113,18 @@ export const customers = {
     return res.json();
   },
 
-  async delete(id: number, agentId: number): Promise<void> {
-    const res = await apiFetch(`/customers/${id}?agent_id=${agentId}`, { method: "DELETE" });
+  async delete(id: number): Promise<void> {
+    const res = await apiFetch(`/customers/${id}`, { method: "DELETE" });
     if (!res.ok) {
       const data = await res.json();
       throw Object.assign(new Error("Delete failed"), { data });
     }
+  },
+
+  async getAppointments(id: number): Promise<AppointmentDetailResponse[]> {
+    const res = await apiFetch(`/customers/${id}/appointments`);
+    if (!res.ok) throw new Error("Failed to load appointment history");
+    const data = await res.json();
+    return data.appointments ?? [];
   },
 };
