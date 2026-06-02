@@ -179,7 +179,7 @@
 }
 .cal-legend-item { display: inline-flex; align-items: center; gap: 7px; }
 .cal-legend-swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
-.cal-legend-swatch--appt { background: #a3d9e8; }
+.cal-legend-swatch--appt { background: #72c8e0; }
 .cal-legend-swatch--break {
   background: repeating-linear-gradient(-45deg, rgba(245,158,11,0.32), rgba(245,158,11,0.32) 3px, rgba(245,158,11,0.10) 3px, rgba(245,158,11,0.10) 6px);
   border: 1px solid rgba(245,158,11,0.45);
@@ -461,14 +461,14 @@
 }
 
 /* Service colour palette */
-.cal-event--c0 { background: #a3d9e8; }
-.cal-event--c1 { background: #a3e8c8; }
-.cal-event--c2 { background: #ffc6dc; }
-.cal-event--c3 { background: #ff9ec0; }
-.cal-event--c4 { background: #ffd699; }
-.cal-event--c5 { background: #ffb380; }
-.cal-event--c6 { background: #d4c1f0; }
-.cal-event--c7 { background: #c5e8a3; }
+.cal-event--c0 { background: #72c8e0; }
+.cal-event--c1 { background: #72d9ab; }
+.cal-event--c2 { background: #ffaacb; }
+.cal-event--c3 { background: #ff7db0; }
+.cal-event--c4 { background: #ffc35e; }
+.cal-event--c5 { background: #ff9850; }
+.cal-event--c6 { background: #c0a8eb; }
+.cal-event--c7 { background: #a8d96e; }
 
 /* Status modifiers */
 .cal-event--conflict {
@@ -653,14 +653,14 @@
   color: var(--cal-ink); font-weight: 600;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
 }
-.cal-month-pill--c0 { background: #a3d9e8; }
-.cal-month-pill--c1 { background: #a3e8c8; }
-.cal-month-pill--c2 { background: #ffc6dc; }
-.cal-month-pill--c3 { background: #ff9ec0; }
-.cal-month-pill--c4 { background: #ffd699; }
-.cal-month-pill--c5 { background: #ffb380; }
-.cal-month-pill--c6 { background: #d4c1f0; }
-.cal-month-pill--c7 { background: #c5e8a3; }
+.cal-month-pill--c0 { background: #72c8e0; }
+.cal-month-pill--c1 { background: #72d9ab; }
+.cal-month-pill--c2 { background: #ffaacb; }
+.cal-month-pill--c3 { background: #ff7db0; }
+.cal-month-pill--c4 { background: #ffc35e; }
+.cal-month-pill--c5 { background: #ff9850; }
+.cal-month-pill--c6 { background: #c0a8eb; }
+.cal-month-pill--c7 { background: #a8d96e; }
 .cal-month-pill--completed { opacity: 0.6; }
 .cal-month-pill--cancelled { opacity: 0.4; }
 .cal-month-pill--cancelled .cal-month-pill-name { text-decoration: line-through; }
