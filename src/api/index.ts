@@ -257,6 +257,13 @@ export const services = {
     if (!res.ok) throw new Error("Delete variation failed");
   },
 
+  async getEmployees(svcId: number, agentId: number): Promise<{ id: number; name: string; extra_price: string }[]> {
+    const res = await apiFetch(`/services/${svcId}/employees?agent_id=${agentId}`);
+    if (!res.ok) return [];
+    const d = await res.json();
+    return d.employees ?? [];
+  },
+
   async activateVariation(svcId: number, varId: number, agentId: number): Promise<ServiceVariationResponse> {
     const res = await apiFetch(`/services/${svcId}/variations/${varId}/activate?agent_id=${agentId}`, { method: "PATCH" });
     if (!res.ok) throw new Error("Failed");

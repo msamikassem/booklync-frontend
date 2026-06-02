@@ -13,8 +13,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { appointmentsApi } from "./api";
-import { customers as customersApi } from "../../api";
-import { employeesApi } from "../Employees/api";
+import { customers as customersApi, services as servicesApi } from "../../api";
 import { formatApiError } from "../../lib/errors";
 import { localInputToUtc, utcToLocalInput, extractPrepSuggestedTime } from "./utils";
 import type { AppointmentDetailResponse, ApptEmployee, ApiError } from "./types";
@@ -66,13 +65,29 @@ export function NewAppointmentModal({ agentId, tz, employees, catalogue, onClose
         (c.phone ?? "").toLowerCase().includes(custSearch.toLowerCase()))
     : customers;
 
-  // Employee capabilities for price preview
-  const { data: empCaps = [] } = useQuery({
-    queryKey: ["emp-caps", Number(employeeId), agentId],
-    queryFn: () => employeesApi.getCapabilities(Number(employeeId), agentId),
-    enabled: !!employeeId,
+  // Employees who can perform the selected service (filters employee dropdown)
+  const { data: svcEmployees } = useQuery({
+    queryKey: ["service-employees", Number(serviceId), agentId],
+    queryFn: () => servicesApi.getEmployees(Number(serviceId), agentId),
+    enabled: !!serviceId,
     staleTime: 5 * 60 * 1000,
   });
+
+  // When service changes, if the selected employee can't do it, clear them
+  useEffect(() => {
+    if (!svcEmployees || !employeeId) return;
+    const capable = svcEmployees.some(e => String(e.id) === employeeId);
+    if (!capable) setEmployeeId("");
+  }, [svcEmployees, employeeId]);
+
+  // Filtered employee list — only those capable of the selected service
+  const filteredEmployees = serviceId && svcEmployees
+    ? employees.filter(e => svcEmployees.some(se => se.id === e.id))
+    : employees;
+
+  // Extra price for selected employee from service employee data
+  const empExtraFromSvc = svcEmployees?.find(se => String(se.id) === employeeId);
+  const extraPrice = empExtraFromSvc ? parseFloat(empExtraFromSvc.extra_price as string ?? "0") : 0;
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -103,13 +118,6 @@ export function NewAppointmentModal({ agentId, tz, employees, catalogue, onClose
       : null;
   const durMins = selectedVar?.duration_minutes ?? (selectedSvc && !hasVariations ? selectedSvc.duration_minutes : null);
 
-  let extraPrice = 0;
-  if (empCaps.length && (serviceId || variationId)) {
-    let cap = variationId ? empCaps.find(c => c.variation_id === Number(variationId)) : null;
-    if (!cap) cap = empCaps.find(c => c.service_id === Number(serviceId));
-    if (!cap && selectedSvc?.title_id) cap = empCaps.find(c => c.title_id === selectedSvc.title_id);
-    if (cap) extraPrice = parseFloat(cap.extra_price as string ?? "0");
-  }
   const totalPrice = basePrice !== null ? basePrice + extraPrice : null;
   const showPriceStrip = totalPrice !== null && !!serviceId && !!employeeId && (!hasVariations || !!variationId);
 
@@ -265,10 +273,20 @@ export function NewAppointmentModal({ agentId, tz, employees, catalogue, onClose
             {/* Employee */}
             <div>
               <label className="block text-sm font-medium text-ink mb-1.5">Employee <span className="text-error">*</span></label>
-              <select value={employeeId} onChange={e => setEmployeeId(e.target.value)} className={iCls}>
-                <option value="">Select employee…</option>
-                {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+              <select value={employeeId} onChange={e => setEmployeeId(e.target.value)} className={iCls}
+                disabled={!!serviceId && filteredEmployees.length === 0}>
+                <option value="">
+                  {serviceId && filteredEmployees.length === 0
+                    ? "No employees assigned to this service"
+                    : "Select employee…"}
+                </option>
+                {filteredEmployees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
               </select>
+              {serviceId && svcEmployees && filteredEmployees.length === 0 && (
+                <p className="text-xs text-amber-700 mt-1">
+                  No employees are assigned to this service. Go to the Services tab to assign employees.
+                </p>
+              )}
             </div>
 
             {/* Date + time */}
