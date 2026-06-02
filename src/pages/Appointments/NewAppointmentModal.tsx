@@ -27,15 +27,15 @@ interface Props {
   catalogue: ServiceCatalogueResponse | undefined;
   prefillEmpId?: number;
   prefillDate?: string;
-  prefillHour?: number;
+  prefillTime?: string;  // "HH:MM" in agent-local time
   onClose: () => void;
   onCreated: (appt: AppointmentDetailResponse) => void;
 }
 
-export function NewAppointmentModal({ agentId, tz, employees, catalogue, prefillEmpId, prefillDate, prefillHour, onClose, onCreated }: Props) {
+export function NewAppointmentModal({ agentId, tz, employees, catalogue, prefillEmpId, prefillDate, prefillTime, onClose, onCreated }: Props) {
   // Default to next hour in agent tz (or prefilled slot)
-  const defaultLocal = (prefillDate && prefillHour != null)
-    ? `${prefillDate}T${String(prefillHour).padStart(2,"0")}:00`
+  const defaultLocal = (prefillDate && prefillTime)
+    ? `${prefillDate}T${prefillTime}`
     : utcToLocalInput(
         (() => { const d = new Date(); d.setMinutes(0, 0, 0); d.setHours(d.getHours() + 1); return d.toISOString(); })(),
         tz

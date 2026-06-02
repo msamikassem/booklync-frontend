@@ -14,6 +14,7 @@ import { AppointmentDrawer } from "../Appointments/AppointmentDrawer";
 import {
   calToISODate, calFromISODate, calAddDays, calWeekStart,
   calMonthStart, calMonthEnd, calAgentNow, calFormatDateLabel,
+  calApptLocalParts, calApptDuration,
 } from "./utils";
 import type { AgentTimeRef } from "./utils";
 import type { AppointmentDetailResponse } from "./types";
@@ -155,7 +156,7 @@ export default function Calendar() {
   const selectedEmployee = visibleEmployees[0] ?? null;
 
   // ── Modal state ───────────────────────────────────────────────────────────
-  const [newApptSlot, setNewApptSlot] = useState<{ empId: number; dateISO: string; hour: number } | null>(null);
+  const [newApptSlot, setNewApptSlot] = useState<{ empId: number; dateISO: string; time: string } | null>(null);
   const [viewAppt, setViewAppt] = useState<AppointmentDetailResponse | null>(null);
 
   const isOwner = me?.is_owner ?? false;
@@ -178,8 +179,30 @@ export default function Calendar() {
   });
 
   const handleSlotClick = useCallback((empId: number, dateISO: string, hour: number) => {
-    setNewApptSlot({ empId, dateISO, hour });
-  }, []);
+    // Sweep forward past any overlapping appointment windows (incl. prep times)
+    let candidate = hour * 60;
+    let moved = true;
+    while (moved) {
+      moved = false;
+      for (const a of appointments) {
+        if ((a.status ?? "pending") === "cancelled") continue;
+        if (Number(a.employee_id) !== empId) continue;
+        const p = calApptLocalParts(a, tz);
+        if (!p || p.dateISO !== dateISO) continue;
+        const apptStart = p.minutes;
+        const apptEnd   = apptStart + (calApptDuration(a) || 30);
+        const effStart  = apptStart - (a.preparation_before_minutes ?? 0);
+        const effEnd    = apptEnd   + (a.preparation_after_minutes  ?? 0);
+        if (candidate >= effStart && candidate < effEnd) {
+          candidate = effEnd;
+          moved = true;
+        }
+      }
+    }
+    const hh = String(Math.floor(candidate / 60)).padStart(2, "0");
+    const mm = String(candidate % 60).padStart(2, "0");
+    setNewApptSlot({ empId, dateISO, time: `${hh}:${mm}` });
+  }, [appointments, tz]);
   const handleApptCreated = useCallback(() => {
     setNewApptSlot(null);
     refetchAppts();
@@ -247,7 +270,7 @@ export default function Calendar() {
           {/* New appointment */}
           {canCreate && (
             <button className="cal-add-btn"
-              onClick={() => setNewApptSlot({ empId: employees[0]?.id ?? 0, dateISO: calToISODate(currentDate), hour: 9 })}>
+              onClick={() => setNewApptSlot({ empId: employees[0]?.id ?? 0, dateISO: calToISODate(currentDate), time: "09:00" })}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               New appointment
             </button>
@@ -303,7 +326,7 @@ export default function Calendar() {
       {newApptSlot && (
         <NewAppointmentModal agentId={agentId} tz={tz}
           employees={bookableEmployees} catalogue={catalogue}
-          prefillEmpId={newApptSlot.empId} prefillDate={newApptSlot.dateISO} prefillHour={newApptSlot.hour}
+          prefillEmpId={newApptSlot.empId} prefillDate={newApptSlot.dateISO} prefillTime={newApptSlot.time}
           onClose={() => setNewApptSlot(null)} onCreated={handleApptCreated} />
       )}
 
