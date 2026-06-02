@@ -179,7 +179,7 @@
 }
 .cal-legend-item { display: inline-flex; align-items: center; gap: 7px; }
 .cal-legend-swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
-.cal-legend-swatch--appt { background: #38bdf8; }
+.cal-legend-swatch--appt { background: #0ea5e9; }
 .cal-legend-swatch--break {
   background: repeating-linear-gradient(-45deg, rgba(245,158,11,0.32), rgba(245,158,11,0.32) 3px, rgba(245,158,11,0.10) 3px, rgba(245,158,11,0.10) 6px);
   border: 1px solid rgba(245,158,11,0.45);
@@ -460,27 +460,14 @@
 }
 
 /* Service colour palette */
-.cal-event--c0 { background: #38bdf8; }
-.cal-event--c1 { background: #34d399; }
-.cal-event--c2 { background: #f472b6; }
-.cal-event--c3 { background: #e879f9; }
-.cal-event--c4 { background: #fbbf24; }
-.cal-event--c5 { background: #fb923c; }
-.cal-event--c6 { background: #a78bfa; }
-.cal-event--c7 { background: #a3e635; }
-
-/* Status tick dot — top-right corner of every event */
-.cal-ev-status-dot {
-  position: absolute; top: 5px; right: 5px;
-  width: 7px; height: 7px; border-radius: 50%;
-  flex-shrink: 0; pointer-events: none; z-index: 1;
-  box-shadow: 0 0 0 1.5px rgba(255,255,255,0.7);
-}
-.cal-ev-status-dot--pending   { background: #fbbf24; }
-.cal-ev-status-dot--confirmed { background: #3b82f6; }
-.cal-ev-status-dot--completed { background: #22c55e; }
-.cal-ev-status-dot--no_show   { background: #ef4444; }
-.cal-ev-status-dot--cancelled { background: #9ca3af; }
+.cal-event--c0 { background: #0ea5e9; }
+.cal-event--c1 { background: #10b981; }
+.cal-event--c2 { background: #ec4899; }
+.cal-event--c3 { background: #d946ef; }
+.cal-event--c4 { background: #f59e0b; }
+.cal-event--c5 { background: #f97316; }
+.cal-event--c6 { background: #8b5cf6; }
+.cal-event--c7 { background: #84cc16; }
 
 /* Branch clock chip */
 .cal-branch-clock {
@@ -682,14 +669,14 @@
   color: var(--cal-ink); font-weight: 600;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
 }
-.cal-month-pill--c0 { background: #38bdf8; }
-.cal-month-pill--c1 { background: #34d399; }
-.cal-month-pill--c2 { background: #f472b6; }
-.cal-month-pill--c3 { background: #e879f9; }
-.cal-month-pill--c4 { background: #fbbf24; }
-.cal-month-pill--c5 { background: #fb923c; }
-.cal-month-pill--c6 { background: #a78bfa; }
-.cal-month-pill--c7 { background: #a3e635; }
+.cal-month-pill--c0 { background: #0ea5e9; }
+.cal-month-pill--c1 { background: #10b981; }
+.cal-month-pill--c2 { background: #ec4899; }
+.cal-month-pill--c3 { background: #d946ef; }
+.cal-month-pill--c4 { background: #f59e0b; }
+.cal-month-pill--c5 { background: #f97316; }
+.cal-month-pill--c6 { background: #8b5cf6; }
+.cal-month-pill--c7 { background: #84cc16; }
 .cal-month-pill--completed { opacity: 0.6; }
 .cal-month-pill--cancelled { opacity: 0.4; }
 .cal-month-pill--cancelled .cal-month-pill-name { text-decoration: line-through; }
