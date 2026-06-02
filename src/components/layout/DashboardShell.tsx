@@ -3,10 +3,38 @@
  * Mirrors the dash-layout / dash-sidebar / dash-topbar structure from dashboard.html.
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { useAgent } from "../../contexts/AgentContext";
+
+function BranchClock({ tz }: { tz: string | null | undefined }) {
+  const [display, setDisplay] = useState("");
+  const [tzShort, setTzShort] = useState("");
+
+  useEffect(() => {
+    if (!tz) { setDisplay(""); return; }
+    const fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz, hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true,
+    });
+    const tzFmt = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "short" });
+    setTzShort(tzFmt.formatToParts(new Date()).find(p => p.type === "timeZoneName")?.value ?? "");
+    const tick = () => setDisplay(fmt.format(new Date()));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [tz]);
+
+  if (!display) return null;
+  return (
+    <div style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "0 14px", height: 34,
+      background: "var(--surface-soft)", borderRadius: 999, userSelect: "none", cursor: "default" }}>
+      <span style={{ fontFamily: "var(--font-mono, monospace)", fontSize: 12.5, fontWeight: 500,
+        color: "var(--ink)", letterSpacing: "0.01em" }}>{display}</span>
+      {tzShort && <span style={{ fontSize: 10.5, color: "var(--muted)", fontWeight: 500 }}>{tzShort}</span>}
+    </div>
+  );
+}
 
 // ── Permission helpers ────────────────────────────────────────────────────────
 
@@ -114,6 +142,7 @@ function BranchPicker() {
 
 export default function DashboardShell() {
   const { me, logout } = useAuth();
+  const { activeAgent } = useAgent();
   const can = useCan();
   const location = useLocation();
 
@@ -275,6 +304,7 @@ export default function DashboardShell() {
         <header className="sticky top-0 z-30 flex items-center justify-between px-8 h-14 bg-canvas border-b border-hairline">
           <h1 className="font-display text-lg font-semibold text-ink">{pageTitle}</h1>
           <div className="flex items-center gap-3">
+            <BranchClock tz={activeAgent?.timezone} />
             <BranchPicker />
           </div>
         </header>

@@ -50,7 +50,7 @@ export function EventBlock({ appt, pxPerMin, startHour, hourCount, todayBreaks, 
   const evStyle: React.CSSProperties = {
     top, height,
     ...(evRadius ? { borderRadius: evRadius } : {}),
-    ...(svcStyle ? { background: svcStyle.replace("background:", "").replace(";", "") } : {}),
+    ...(svcStyle ? { background: svcStyle } : {}),
   };
 
   return (
@@ -63,7 +63,7 @@ export function EventBlock({ appt, pxPerMin, startHour, hourCount, todayBreaks, 
         const stripClass = svcStyle ? "" : `cal-event--${colorCls}`;
         const stripStyle: React.CSSProperties = {
           top: st, height: vh, borderRadius: "6px 6px 0 0",
-          ...(svcStyle ? { background: svcStyle.replace("background:", "").replace(";", "") } : {}),
+          ...(svcStyle ? { background: svcStyle } : {}),
         };
         return <div className={`cal-prep-strip ${stripClass}`} style={stripStyle} />;
       })()}
@@ -89,7 +89,7 @@ export function EventBlock({ appt, pxPerMin, startHour, hourCount, todayBreaks, 
         const stripClass = svcStyle ? "" : `cal-event--${colorCls}`;
         const stripStyle: React.CSSProperties = {
           top: top + height, height: sh, borderRadius: "0 0 6px 6px",
-          ...(svcStyle ? { background: svcStyle.replace("background:", "").replace(";", "") } : {}),
+          ...(svcStyle ? { background: svcStyle } : {}),
         };
         return <div className={`cal-prep-strip ${stripClass}`} style={stripStyle} />;
       })()}

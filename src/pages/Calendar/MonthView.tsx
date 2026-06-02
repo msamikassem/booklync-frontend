@@ -104,7 +104,7 @@ export function MonthView({
               cellConflict ? "cal-month-pill--conflict" : "",
             ].filter(Boolean).join(" ");
             const inlineStyle = svcStyle
-              ? { background: svcStyle.replace("background:", "").replace(";", "") }
+              ? { background: svcStyle }
               : undefined;
             return (
               <span key={a.id} className={pillClass} style={inlineStyle}

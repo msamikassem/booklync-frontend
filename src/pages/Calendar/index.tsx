@@ -91,34 +91,6 @@ export default function Calendar() {
   const agentNow = calAgentNow(agentTimeRef);
   const todayISO = agentNow?.dateISO ?? calToISODate(new Date());
 
-  // ── Branch clock (ticks every second) ────────────────────────────────────
-  const [clockDisplay, setClockDisplay] = useState<string>("");
-  useEffect(() => {
-    const update = () => {
-      const ref = agentTimeRef;
-      if (!ref) { setClockDisplay(""); return; }
-      const elapsed = Math.floor((Date.now() - ref.fetchedAt) / 1000);
-      const totalSec = ref.hours * 3600 + ref.mins * 60 + ref.secs + elapsed;
-      const daySec = ((totalSec % 86400) + 86400) % 86400;
-      const h = Math.floor(daySec / 3600);
-      const m = Math.floor((daySec % 3600) / 60);
-      const s = daySec % 60;
-      const ampm = h >= 12 ? "PM" : "AM";
-      const h12 = ((h + 11) % 12) + 1;
-      setClockDisplay(`${String(h12).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")} ${ampm}`);
-    };
-    update();
-    const id = setInterval(update, 1000);
-    return () => clearInterval(id);
-  }, [agentTimeRef]);
-
-  const tzShort = useMemo(() => {
-    if (!tz) return "";
-    try {
-      return new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "short" })
-        .formatToParts(new Date()).find(p => p.type === "timeZoneName")?.value ?? tz;
-    } catch { return tz; }
-  }, [tz]);
 
   // ── Navigation ────────────────────────────────────────────────────────────
   const navigate = useCallback((dir: 1 | -1) => {
@@ -246,13 +218,6 @@ export default function Calendar() {
             <button className="cal-today-btn" onClick={goToday}>Today</button>
           </div>
 
-          {/* Branch clock */}
-          {clockDisplay && (
-            <div className="cal-branch-clock">
-              <span className="cal-clock-time">{clockDisplay}</span>
-              {tzShort && <span className="cal-clock-tz">{tzShort}</span>}
-            </div>
-          )}
         </div>
 
         <div className="cal-toolbar-right">

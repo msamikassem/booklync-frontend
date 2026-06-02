@@ -188,11 +188,12 @@ export function calServiceColorClass(appt: AppointmentDetailResponse): string {
   return `c${calHashIdx(key, CAL_COLOR_COUNT)}`;
 }
 
-/** Returns an inline background CSS value at 25% opacity, or "" when no color. */
+/** Returns a solid inline background color blended 55% service color + 45% white. */
 export function calSvcColorStyle(hex: string | null | undefined): string {
   if (!hex || !/^#[0-9a-fA-F]{6}$/.test(hex)) return "";
   const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
-  return `rgba(${r},${g},${b},0.50)`;
+  const pr=Math.round(r*0.55+255*0.45), pg=Math.round(g*0.55+255*0.45), pb=Math.round(b*0.55+255*0.45);
+  return `rgb(${pr},${pg},${pb})`;
 }
 
 // ── Date label formatting ─────────────────────────────────────────────────────
