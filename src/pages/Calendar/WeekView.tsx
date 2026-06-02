@@ -1,20 +1,25 @@
-/**
- * Week view — 7 day columns for a single selected employee.
- * Shares the same rendering logic as DayView (working bands, breaks, day-off, events).
- * ±1-day fetch widening is handled by the parent; this component only receives
- * appointments filtered by employee and re-filters by dateISO client-side.
- */
-
 import { EventBlock } from "./EventBlock";
 import {
   calDow, calApptLocalParts, calAgentNow, calWeekStart, calAddDays,
-  calToISODate, calRangeFromBH, calComputeTimeRange, calFmtTimeLabel, DOW_SHORT,
+  calToISODate, calRangeFromBH, calComputeTimeRange,
 } from "./utils";
 import { ROW_H } from "./types";
 import type { AgentTimeRef } from "./utils";
 import type { AppointmentDetailResponse } from "./types";
 import type { CalEmployee, CalWorkingHour, CalBreak, CalDayOff } from "./api";
 import type { BusinessHourResponse } from "../../api/types";
+
+const DOW_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function CalTimeLabel({ hour }: { hour: number }) {
+  const h = ((hour % 24) + 24) % 24;
+  let num: string, suf: string;
+  if (h === 0)      { num = "12:00"; suf = "am"; }
+  else if (h === 12){ num = "12:00"; suf = "pm"; }
+  else if (h < 12)  { num = `${h}:00`; suf = "am"; }
+  else              { num = `${h-12}:00`; suf = "pm"; }
+  return <><span className="cal-time-cell-num">{num}</span><span className="cal-time-cell-suf">{suf}</span></>;
+}
 
 interface Props {
   currentDate: Date;
@@ -40,7 +45,7 @@ export function WeekView({
   const weekStart = calWeekStart(currentDate);
   const days = Array.from({ length: 7 }, (_, i) => calAddDays(weekStart, i));
 
-  // Widest range across all 7 days
+  // Widest BH range across all 7 days
   const bhWeekRange = days.reduce<{ startHour: number; endHour: number } | null>((acc, d) => {
     const r = calRangeFromBH(businessHours, calDow(d));
     if (!r) return acc;
@@ -52,143 +57,137 @@ export function WeekView({
   const hourCount = endHour - startHour;
   const pxPerMin  = ROW_H / 60;
 
-  const agentNow = calAgentNow(agentTimeRef);
-  const weekStartISO = calToISODate(weekStart);
-  const weekEndISO   = calToISODate(calAddDays(weekStart, 6));
-  const todayInWeek  = agentNow && agentNow.dateISO >= weekStartISO && agentNow.dateISO <= weekEndISO;
+  const agentNow      = calAgentNow(agentTimeRef);
+  const weekStartISO  = calToISODate(weekStart);
+  const weekEndISO    = calToISODate(calAddDays(weekStart, 6));
+  const todayInWeek   = agentNow && agentNow.dateISO >= weekStartISO && agentNow.dateISO <= weekEndISO;
 
-  const AXIS_W   = 64;
-  const COL_W    = 120;
+  const isEmpInactive = !employee.active;
 
   return (
-    <div className="overflow-auto flex-1">
-      <div style={{ minWidth: AXIS_W + 7 * COL_W }}>
-        {/* Day headers */}
-        <div className="sticky top-0 z-20 bg-canvas border-b border-hairline flex" style={{ paddingLeft: AXIS_W }}>
-          {days.map(d => {
-            const dISO    = calToISODate(d);
-            const isToday = dISO === todayISO;
-            return (
-              <div key={dISO} className={`flex flex-col items-center justify-center py-2 border-l border-hairline flex-1 ${isToday ? "bg-primary/5" : ""}`}
-                style={{ minWidth: COL_W }}>
-                <span className="text-[10px] font-medium text-muted uppercase">{DOW_SHORT[calDow(d)]}</span>
-                <span className={`text-sm font-bold ${isToday ? "text-primary" : "text-ink"}`}>{d.getDate()}</span>
-              </div>
-            );
-          })}
+    <>
+      {isEmpInactive && (
+        <div className="cal-inactive-notice">
+          {employee.name} is inactive at this branch
         </div>
-
-        {/* Body */}
-        <div className="flex">
+      )}
+      <div className="cal-day-scroll">
+        <div className="cal-week-wrap">
           {/* Time axis */}
-          <div className="flex-shrink-0 border-r border-hairline" style={{ width: AXIS_W }}>
+          <div className="cal-time-axis" style={{ gridTemplateRows: `110px repeat(${hourCount}, ${ROW_H}px)` }}>
+            <div className="cal-axis-corner" />
             {Array.from({ length: hourCount }, (_, i) => startHour + i).map(h => (
-              <div key={h} className="border-b border-hairline/50 flex items-start justify-end px-1.5" style={{ height: ROW_H }}>
-                <span className="text-[10px] text-muted -translate-y-2">{calFmtTimeLabel(h)}</span>
+              <div key={h} className="cal-time-cell">
+                <CalTimeLabel hour={h} />
               </div>
             ))}
           </div>
 
-          {/* Day columns */}
-          {days.map(d => {
-            const dow     = calDow(d);
-            const dateISO = calToISODate(d);
-            const isToday = dateISO === todayISO;
+          {/* Right: header + columns */}
+          <div>
+            <div className="cal-week-headerstrip">
+              {days.map(d => {
+                const dISO    = calToISODate(d);
+                const isToday = dISO === todayISO;
+                return (
+                  <div key={dISO} className={`cal-week-day-header${isToday ? " is-today" : ""}`}>
+                    <span className="cal-week-day-name">{DOW_LABELS[calDow(d)]}</span>
+                    <span className="cal-week-day-num">{d.getDate()}</span>
+                  </div>
+                );
+              })}
+            </div>
 
-            const todayHoursArr = hours.filter(h => h.day_of_week === dow);
-            const todayBreaks   = breaks.filter(b => b.day_of_week === dow);
-            const branchDayOff  = branchDaysOff.find(o => o.start_date <= dateISO && o.end_date >= dateISO);
-            const empDayOff     = daysOff.find(o => o.start_date <= dateISO && o.end_date >= dateISO);
-            const dayOff        = branchDayOff ?? empDayOff;
-            const isInactive    = !employee.active;
-            const conflict      = isInactive || !!dayOff;
+            <div className="cal-week-cols">
+              {days.map(d => {
+                const dow     = calDow(d);
+                const dateISO = calToISODate(d);
+                const isToday = dateISO === todayISO;
 
-            const colAppts = appointments.filter(a => {
-              if (Number(a.employee_id) !== employee.id) return false;
-              const p = calApptLocalParts(a, tz);
-              return p?.dateISO === dateISO;
-            });
+                const todayBreaks = breaks.filter(b => b.day_of_week === dow);
+                const branchDayOff  = branchDaysOff.find(o => o.start_date <= dateISO && o.end_date >= dateISO);
+                const empDayOff     = daysOff.find(o => o.start_date <= dateISO && o.end_date >= dateISO);
+                const dayOff        = branchDayOff ?? empDayOff;
+                const isBranchOff   = !!branchDayOff;
+                const conflict      = isEmpInactive || !!dayOff;
 
-            const nowTop = (todayInWeek && agentNow && agentNow.dateISO === dateISO)
-              ? Math.round((agentNow.minutes - startHour*60) * pxPerMin)
-              : -1;
+                const nowTop = (todayInWeek && agentNow && agentNow.dateISO === dateISO)
+                  ? Math.round((agentNow.minutes - startHour * 60) * pxPerMin)
+                  : -1;
 
-            return (
-              <div key={dateISO} className={`relative border-l border-hairline flex-1 ${isToday ? "bg-primary/[0.02]" : ""}`}
-                style={{ minWidth: COL_W }}>
-                {/* Hour cells */}
-                {Array.from({ length: hourCount }, (_, i) => startHour + i).map(h => (
-                  <div key={h} className={`border-b border-hairline/50 group ${canCreate && !dayOff && !isInactive ? "cursor-pointer hover:bg-primary/5" : ""}`}
-                    style={{ height: ROW_H }}
-                    onClick={() => { if (canCreate && !dayOff && !isInactive) onSlotClick(employee.id, dateISO, h); }}>
-                    {canCreate && !dayOff && !isInactive && (
-                      <span className="hidden group-hover:flex items-center gap-0.5 text-[9px] text-primary/70 px-1 pt-0.5">
-                        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                        New
-                      </span>
+                const colAppts = appointments.filter(a => {
+                  if (Number(a.employee_id) !== employee.id) return false;
+                  const p = calApptLocalParts(a, tz);
+                  return p?.dateISO === dateISO;
+                });
+
+                return (
+                  <div key={dateISO}
+                    className={`cal-week-col${isToday ? " is-today" : ""}${isEmpInactive ? " cal-week-col--inactive" : ""}`}
+                    style={{ gridTemplateRows: `repeat(${hourCount}, ${ROW_H}px)` }}>
+
+                    {/* Hour cells */}
+                    {Array.from({ length: hourCount }, (_, i) => startHour + i).map(h => (
+                      <div key={h} className="cal-hour-cell"
+                        onClick={() => { if (canCreate && !dayOff && !isEmpInactive) onSlotClick(employee.id, dateISO, h); }}>
+                        {canCreate && !dayOff && !isEmpInactive && (
+                          <span className="cal-hour-add-hint">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            New
+                          </span>
+                        )}
+                      </div>
+                    ))}
+
+                    {/* Break overlays */}
+                    {todayBreaks.map((br, i) => {
+                      const [sH, sM] = br.start_time.split(":").map(Number);
+                      const [eH, eM] = br.end_time.split(":").map(Number);
+                      const startMin = (sH * 60 + sM) - startHour * 60;
+                      const endMin   = (eH * 60 + eM) - startHour * 60;
+                      if (endMin <= 0 || startMin >= hourCount * 60) return null;
+                      const top    = Math.round(Math.max(0, startMin) * pxPerMin);
+                      const height = Math.max(20, Math.round(Math.min(hourCount * 60, endMin) * pxPerMin) - top);
+                      return (
+                        <div key={i} className="cal-break-overlay" style={{ top, height }}>
+                          <span className="cal-break-overlay-label">{br.reason || "Break"}</span>
+                        </div>
+                      );
+                    })}
+
+                    {/* Events */}
+                    {colAppts.map(a => {
+                      if ((a.status ?? "pending") === "cancelled") return null;
+                      return (
+                        <EventBlock key={a.id} appt={a} pxPerMin={pxPerMin} startHour={startHour}
+                          hourCount={hourCount} todayBreaks={todayBreaks} conflict={conflict} tz={tz}
+                          onClick={() => onSelectAppt(a)} />
+                      );
+                    })}
+
+                    {/* Now line + dot */}
+                    {isToday && nowTop >= 0 && nowTop <= hourCount * ROW_H && (
+                      <>
+                        <div className="cal-now-line" style={{ top: nowTop }} />
+                        <div className="cal-now-dot cal-now-dot--col" style={{ top: nowTop }} />
+                      </>
+                    )}
+
+                    {/* Day-off overlay */}
+                    {dayOff && (
+                      <div className={`cal-dayoff-overlay${isBranchOff ? " cal-dayoff-overlay--branch" : ""}`}>
+                        <span className="cal-dayoff-overlay-label">
+                          {isBranchOff ? (dayOff.name || "Branch closed") : (dayOff.name || "Day off")}
+                        </span>
+                      </div>
                     )}
                   </div>
-                ))}
-
-                {/* Working bands */}
-                {todayHoursArr.map((wh, i) => {
-                  const [sH,sM] = wh.start_time.split(":").map(Number);
-                  const [eH,eM] = wh.end_time.split(":").map(Number);
-                  const s = (sH*60+sM) - startHour*60;
-                  const e = (eH*60+eM) - startHour*60;
-                  if (e<=0||s>=hourCount*60) return null;
-                  return <div key={i} className="absolute left-0 right-0 bg-green-500/5 pointer-events-none"
-                    style={{ top: Math.round(Math.max(0,s)*pxPerMin), height: Math.round(Math.min(hourCount*60,e)*pxPerMin)-Math.round(Math.max(0,s)*pxPerMin) }} />;
-                })}
-
-                {/* Breaks */}
-                {todayBreaks.map((br, i) => {
-                  const [sH,sM] = br.start_time.split(":").map(Number);
-                  const [eH,eM] = br.end_time.split(":").map(Number);
-                  const s = (sH*60+sM) - startHour*60;
-                  const e = (eH*60+eM) - startHour*60;
-                  if (e<=0||s>=hourCount*60) return null;
-                  const top = Math.round(Math.max(0,s)*pxPerMin);
-                  const height = Math.max(16, Math.round(Math.min(hourCount*60,e)*pxPerMin)-top);
-                  return <div key={i} className="absolute left-0 right-0 bg-orange-100/70 border-l border-orange-300 pointer-events-none"
-                    style={{ top, height }}>
-                    <span className="text-[8px] text-orange-700 px-0.5 truncate block">{br.reason ?? "Break"}</span>
-                  </div>;
-                })}
-
-                {/* Events */}
-                <div className="absolute inset-0 pointer-events-none">
-                  {colAppts.map(a => {
-                    if ((a.status ?? "pending") === "cancelled") return null;
-                    return (
-                      <div key={a.id} className="pointer-events-auto">
-                        <EventBlock appt={a} pxPerMin={pxPerMin} startHour={startHour} hourCount={hourCount}
-                          todayBreaks={todayBreaks} conflict={conflict} tz={tz}
-                          onClick={() => onSelectAppt(a)} />
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Now line */}
-                {nowTop >= 0 && nowTop <= hourCount*ROW_H && (
-                  <div className="absolute left-0 right-0 h-px bg-red-500 pointer-events-none z-10" style={{ top: nowTop }} />
-                )}
-
-                {/* Day-off overlay */}
-                {dayOff && (
-                  <div className="absolute inset-0 pointer-events-none flex items-center justify-center"
-                    style={{ background: branchDayOff ? "rgba(239,246,255,0.85)" : "rgba(249,250,251,0.85)" }}>
-                    <span className="text-[10px] text-muted bg-white px-2 py-0.5 rounded-full shadow-sm">
-                      {dayOff.name || (branchDayOff ? "Closed" : "Day off")}
-                    </span>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

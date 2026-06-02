@@ -1,20 +1,6 @@
-/**
- * Calendar page — day / week / month views.
- *
- * Data strategy:
- *  - Employees, business hours, branch days-off: staleTime 5min
- *  - Appointments: staleTime 0 (always fresh), date range ±1 day widened in UTC
- *  - Per-employee hours/breaks/days-off: staleTime 5min, loaded in parallel
- *  - Agent clock: fetched once from /availability/time, projected forward (no browser clock)
- *  - Now-line: tick every 60s forces re-render
- *
- * Timezone constraint: all calendar bucketing uses start_time_local, NOT browser time.
- * The ±1-day widening ensures appointments near UTC midnight are captured;
- * client-side p.dateISO === dateISO re-filters by agent-local date.
- */
-
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { useQuery, useQueries } from "@tanstack/react-query";
+import "./Calendar.css";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
 import { useAgent } from "../../contexts/AgentContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { services as servicesApi } from "../../api";
@@ -25,10 +11,9 @@ import { WeekView } from "./WeekView";
 import { MonthView } from "./MonthView";
 import { NewAppointmentModal } from "../Appointments/NewAppointmentModal";
 import { AppointmentDrawer } from "../Appointments/AppointmentDrawer";
-import { useQueryClient } from "@tanstack/react-query";
 import {
-  calToISODate, calFromISODate, calAddDays, calWeekStart, calMonthStart, calMonthEnd,
-  calAgentNow, calFormatDateLabel,
+  calToISODate, calFromISODate, calAddDays, calWeekStart,
+  calMonthStart, calMonthEnd, calAgentNow, calFormatDateLabel,
 } from "./utils";
 import type { AgentTimeRef } from "./utils";
 import type { AppointmentDetailResponse } from "./types";
@@ -45,12 +30,11 @@ function computeCalRange(view: CalView, d: Date): { dateFrom: string; dateTo: st
     const ws = calWeekStart(d);
     return widen(ws, calAddDays(ws, 6));
   }
-  // month — widen the full Mon-anchored grid
   const ms = calMonthStart(d);
   const me = calMonthEnd(d);
   const gridStart = calWeekStart(ms);
-  const lastDow = (me.getDay() + 6) % 7; // Mon=0
-  const gridEnd = lastDow === 6 ? me : calAddDays(me, 6 - lastDow);
+  const lastDow   = (me.getDay() + 6) % 7;
+  const gridEnd   = lastDow === 6 ? me : calAddDays(me, 6 - lastDow);
   return widen(gridStart, gridEnd);
 }
 
@@ -59,24 +43,46 @@ export default function Calendar() {
   const { me } = useAuth();
   const qc = useQueryClient();
   const agentId = activeAgent?.id ?? 0;
-  const tz = activeAgent?.timezone ?? "UTC";
+  const tz      = activeAgent?.timezone ?? "UTC";
 
   // ── View state ────────────────────────────────────────────────────────────
   const [view, setView] = useState<CalView>("day");
   const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
   const [selectedEmpId, setSelectedEmpId] = useState<number | null>(null);
 
+  // ── Pill-slider ───────────────────────────────────────────────────────────
+  const pillGroupRef = useRef<HTMLDivElement>(null);
+  const [sliderStyle, setSliderStyle] = useState<React.CSSProperties>({ left: 0, width: 0 });
+  useEffect(() => {
+    const group = pillGroupRef.current;
+    if (!group) return;
+    const active = group.querySelector(".cal-pill--active") as HTMLElement | null;
+    if (!active) return;
+    const gr = group.getBoundingClientRect();
+    const ar = active.getBoundingClientRect();
+    setSliderStyle({ left: ar.left - gr.left, width: ar.width });
+  }, [view]);
+  useEffect(() => {
+    const onResize = () => {
+      const group = pillGroupRef.current;
+      if (!group) return;
+      const active = group.querySelector(".cal-pill--active") as HTMLElement | null;
+      if (!active) return;
+      const gr = group.getBoundingClientRect();
+      const ar = active.getBoundingClientRect();
+      setSliderStyle({ left: ar.left - gr.left, width: ar.width });
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   // ── Agent clock ───────────────────────────────────────────────────────────
   const [agentTimeRef, setAgentTimeRef] = useState<AgentTimeRef | null>(null);
-  const [, setTick] = useState(0); // forces re-render every 60s for now-line
-
+  const [, setTick] = useState(0);
   useEffect(() => {
     if (!agentId) return;
-    calApi.agentTime(agentId).then(ref => {
-      if (ref) setAgentTimeRef(ref);
-    });
+    calApi.agentTime(agentId).then(ref => { if (ref) setAgentTimeRef(ref); });
   }, [agentId]);
-
   useEffect(() => {
     const id = setInterval(() => setTick(t => t + 1), 60_000);
     return () => clearInterval(id);
@@ -88,18 +94,22 @@ export default function Calendar() {
   // ── Navigation ────────────────────────────────────────────────────────────
   const navigate = useCallback((dir: 1 | -1) => {
     setCurrentDate(d => {
-      if (view === "day")   return calAddDays(d, dir);
-      if (view === "week")  return calAddDays(d, 7 * dir);
-      const nm = new Date(d.getFullYear(), d.getMonth() + dir, 1);
-      return nm;
+      if (view === "day")  return calAddDays(d, dir);
+      if (view === "week") return calAddDays(d, 7 * dir);
+      const x = new Date(d.getFullYear(), d.getMonth() + dir, 1);
+      return x;
     });
   }, [view]);
 
-  const goToday = useCallback(() => {
+  const goToday = useCallback(async () => {
+    if (agentId) {
+      const ref = await calApi.agentTime(agentId);
+      if (ref) setAgentTimeRef(ref);
+    }
     setCurrentDate(calFromISODate(todayISO));
-  }, [todayISO]);
+  }, [agentId, todayISO]);
 
-  // ── Derived date range for data fetch ─────────────────────────────────────
+  // ── Date range ────────────────────────────────────────────────────────────
   const { dateFrom, dateTo } = useMemo(
     () => computeCalRange(view, currentDate),
     [view, currentDate]
@@ -109,287 +119,202 @@ export default function Calendar() {
   const { data: employees = [] } = useQuery({
     queryKey: ["cal-employees", agentId],
     queryFn: () => calApi.employees(agentId),
-    staleTime: 5 * 60_000,
-    enabled: !!agentId,
+    staleTime: 5 * 60_000, enabled: !!agentId,
   });
-
   const { data: businessHours = [] } = useQuery({
     queryKey: ["cal-business-hours", agentId],
     queryFn: () => calApi.businessHours(agentId),
-    staleTime: 5 * 60_000,
-    enabled: !!agentId,
+    staleTime: 5 * 60_000, enabled: !!agentId,
   });
-
   const { data: branchDaysOff = [] } = useQuery({
     queryKey: ["cal-branch-daysoff", agentId],
     queryFn: () => calApi.branchDaysOff(agentId),
-    staleTime: 5 * 60_000,
-    enabled: !!agentId,
+    staleTime: 5 * 60_000, enabled: !!agentId,
   });
-
   const { data: appointments = [], refetch: refetchAppts } = useQuery({
     queryKey: ["cal-appointments", agentId, dateFrom, dateTo],
     queryFn: () => calApi.appointments(agentId, dateFrom, dateTo),
-    staleTime: 0,
-    enabled: !!agentId,
+    staleTime: 0, enabled: !!agentId,
   });
 
-  // Per-employee hours (parallel)
-  const hoursResults = useQueries({
-    queries: employees.map(e => ({
-      queryKey: ["cal-emp-hours", e.id, agentId],
-      queryFn: () => calApi.hours(e.id, agentId),
-      staleTime: 5 * 60_000,
-      enabled: !!agentId,
-    })),
-  });
-  const breaksResults = useQueries({
-    queries: employees.map(e => ({
-      queryKey: ["cal-emp-breaks", e.id, agentId],
-      queryFn: () => calApi.breaks(e.id, agentId),
-      staleTime: 5 * 60_000,
-      enabled: !!agentId,
-    })),
-  });
-  const daysOffResults = useQueries({
-    queries: employees.map(e => ({
-      queryKey: ["cal-emp-daysoff", e.id, agentId],
-      queryFn: () => calApi.daysOff(e.id, agentId),
-      staleTime: 5 * 60_000,
-      enabled: !!agentId,
-    })),
-  });
+  const hoursResults  = useQueries({ queries: employees.map(e => ({ queryKey: ["cal-emp-hours",   e.id, agentId], queryFn: () => calApi.hours(e.id, agentId),  staleTime: 5*60_000, enabled: !!agentId })) });
+  const breaksResults = useQueries({ queries: employees.map(e => ({ queryKey: ["cal-emp-breaks",  e.id, agentId], queryFn: () => calApi.breaks(e.id, agentId), staleTime: 5*60_000, enabled: !!agentId })) });
+  const daysOffResults = useQueries({ queries: employees.map(e => ({ queryKey: ["cal-emp-daysoff", e.id, agentId], queryFn: () => calApi.daysOff(e.id, agentId),  staleTime: 5*60_000, enabled: !!agentId })) });
 
-  // Build Maps keyed by employee id
-  const hoursMap = useMemo(() => {
-    const m = new Map<number, typeof hoursResults[0]["data"]>();
-    employees.forEach((e, i) => m.set(e.id, hoursResults[i]?.data ?? []));
-    return m;
-  }, [employees, hoursResults]);
-  const breaksMap = useMemo(() => {
-    const m = new Map<number, typeof breaksResults[0]["data"]>();
-    employees.forEach((e, i) => m.set(e.id, breaksResults[i]?.data ?? []));
-    return m;
-  }, [employees, breaksResults]);
-  const daysOffMap = useMemo(() => {
-    const m = new Map<number, typeof daysOffResults[0]["data"]>();
-    employees.forEach((e, i) => m.set(e.id, daysOffResults[i]?.data ?? []));
-    return m;
-  }, [employees, daysOffResults]);
+  const hoursMap  = useMemo(() => { const m = new Map<number, import("./api").CalWorkingHour[]>(); employees.forEach((e, i) => m.set(e.id, hoursResults[i]?.data  ?? [])); return m; }, [employees, hoursResults]);
+  const breaksMap = useMemo(() => { const m = new Map<number, import("./api").CalBreak[]>();        employees.forEach((e, i) => m.set(e.id, breaksResults[i]?.data ?? [])); return m; }, [employees, breaksResults]);
+  const daysOffMap = useMemo(() => { const m = new Map<number, import("./api").CalDayOff[]>();      employees.forEach((e, i) => m.set(e.id, daysOffResults[i]?.data ?? [])); return m; }, [employees, daysOffResults]);
 
-  // Employee list for views that need arrays (DayView shows all, WeekView shows one)
+  // ── Visible employees for each view ──────────────────────────────────────
   const visibleEmployees = useMemo(() => {
     if (view === "day") return employees;
     if (selectedEmpId) return employees.filter(e => e.id === selectedEmpId);
-    return employees.slice(0, 1); // default to first employee in week view
+    return employees.slice(0, 1);
   }, [view, employees, selectedEmpId]);
-
   const selectedEmployee = visibleEmployees[0] ?? null;
 
   // ── Modal state ───────────────────────────────────────────────────────────
   const [newApptSlot, setNewApptSlot] = useState<{ empId: number; dateISO: string; hour: number } | null>(null);
   const [viewAppt, setViewAppt] = useState<AppointmentDetailResponse | null>(null);
 
-  // Permission check
   const isOwner = me?.is_owner ?? false;
-  const agentPermKeys: string[] = useMemo(() => {
+  const agentPermKeys = useMemo(() => {
     if (isOwner) return ["manage_appointments"];
     if (!me || !agentId) return [];
-    const found = me.branches?.find(b => b.agent_id === agentId);
-    return found?.permissions ?? [];
+    return me.branches?.find(b => b.agent_id === agentId)?.permissions ?? [];
   }, [me, agentId, isOwner]);
   const canCreate = isOwner || agentPermKeys.includes("manage_appointments");
 
-  // ── Service catalogue for modal ───────────────────────────────────────────
   const { data: catalogue } = useQuery({
     queryKey: ["services-catalogue", agentId],
     queryFn: () => servicesApi.catalogue(agentId),
-    staleTime: 5 * 60_000,
-    enabled: !!agentId && !!newApptSlot,
+    staleTime: 5 * 60_000, enabled: !!agentId && !!newApptSlot,
   });
   const { data: bookableEmployees = [] } = useQuery({
     queryKey: ["employees-bookable", agentId],
     queryFn: () => employeesApi.list(agentId),
-    staleTime: 5 * 60_000,
-    enabled: !!agentId && !!newApptSlot,
+    staleTime: 5 * 60_000, enabled: !!agentId && !!newApptSlot,
   });
 
   const handleSlotClick = useCallback((empId: number, dateISO: string, hour: number) => {
     setNewApptSlot({ empId, dateISO, hour });
   }, []);
-
   const handleApptCreated = useCallback(() => {
     setNewApptSlot(null);
     refetchAppts();
-    // also bust the appointments list query so the list view stays in sync
     qc.invalidateQueries({ queryKey: ["appointments"] });
   }, [refetchAppts, qc]);
 
-  // ── Date input handler ────────────────────────────────────────────────────
-  const handleDateInput = (v: string) => {
-    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) setCurrentDate(calFromISODate(v));
-  };
-
-  const dateLabel = calFormatDateLabel(currentDate, view, todayISO);
+  const dateLabel   = calFormatDateLabel(currentDate, view, todayISO);
   const dateInputVal = calToISODate(view === "week" ? calWeekStart(currentDate) : currentDate);
 
+  const handleViewSwitch = (v: CalView) => {
+    setView(v);
+    // week/month default to first employee when switching in
+    if ((v === "week" || v === "month") && !selectedEmpId && employees.length) {
+      setSelectedEmpId(employees[0].id);
+    }
+  };
+
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "0 24px 24px", height: "100%", boxSizing: "border-box" }}>
       {/* Toolbar */}
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-hairline bg-canvas flex-shrink-0 flex-wrap">
-        {/* Prev / Today / Next */}
-        <button onClick={() => navigate(-1)} className="w-7 h-7 rounded hover:bg-surface flex items-center justify-center text-ink/60">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-        </button>
-        <button onClick={goToday} className="px-2.5 py-1 text-xs font-medium rounded border border-hairline hover:bg-surface text-ink/70">Today</button>
-        <button onClick={() => navigate(1)} className="w-7 h-7 rounded hover:bg-surface flex items-center justify-center text-ink/60">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
-
-        {/* Date label */}
-        <span className="text-sm font-semibold text-ink flex-1 min-w-0 truncate">{dateLabel}</span>
-
-        {/* Date jump input */}
-        <input
-          type="date"
-          value={dateInputVal}
-          onChange={e => handleDateInput(e.target.value)}
-          className="text-xs border border-hairline rounded px-2 py-1 text-ink bg-canvas focus:outline-none focus:ring-1 focus:ring-primary/30"
-        />
-
-        {/* Employee filter (week + month) */}
-        {(view === "week" || view === "month") && employees.length > 1 && (
-          <select
-            value={selectedEmpId ?? ""}
-            onChange={e => setSelectedEmpId(e.target.value ? Number(e.target.value) : null)}
-            className="text-xs border border-hairline rounded px-2 py-1 text-ink bg-canvas focus:outline-none focus:ring-1 focus:ring-primary/30 max-w-[140px]"
-          >
-            <option value="">All employees</option>
-            {employees.map(e => (
-              <option key={e.id} value={e.id}>{e.name}</option>
-            ))}
-          </select>
-        )}
-
-        {/* View switcher */}
-        <div className="flex rounded border border-hairline overflow-hidden">
-          {(["day","week","month"] as CalView[]).map(v => (
-            <button
-              key={v}
-              onClick={() => setView(v)}
-              className={`px-3 py-1 text-xs font-medium capitalize border-r border-hairline last:border-r-0
-                ${view === v ? "bg-primary text-white" : "bg-canvas text-ink/60 hover:bg-surface"}`}
-            >
-              {v}
+      <div className="cal-toolbar">
+        <div className="cal-toolbar-left">
+          <div className="cal-datenav">
+            <button className="cal-datenav-btn" onClick={() => navigate(-1)} aria-label="Previous">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
             </button>
-          ))}
+            <div className="cal-datenav-label">
+              <span>{dateLabel}</span>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.55 }}><polyline points="6 9 12 15 18 9"/></svg>
+              <input type="date" className="cal-datenav-input" value={dateInputVal}
+                onChange={e => { if (e.target.value) setCurrentDate(calFromISODate(e.target.value)); }} />
+            </div>
+            <button className="cal-datenav-btn" onClick={() => navigate(1)} aria-label="Next">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <button className="cal-today-btn" onClick={goToday}>Today</button>
+          </div>
         </div>
 
-        {/* New appointment */}
-        {canCreate && (
-          <button
-            onClick={() => setNewApptSlot({ empId: employees[0]?.id ?? 0, dateISO: calToISODate(currentDate), hour: 9 })}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-xs font-semibold rounded-lg hover:bg-primary/90"
-          >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            New
-          </button>
-        )}
+        <div className="cal-toolbar-right">
+          {/* Employee filter (week/month) */}
+          {(view === "week" || view === "month") && employees.length > 1 && (
+            <select className="cal-emp-filter"
+              value={selectedEmpId ?? (employees[0]?.id ?? "")}
+              onChange={e => setSelectedEmpId(Number(e.target.value))}>
+              {employees.map(e => (
+                <option key={e.id} value={e.id}>{e.name}{!e.active ? " (Inactive)" : ""}</option>
+              ))}
+            </select>
+          )}
+
+          {/* View pill switcher */}
+          <div className="cal-pillgroup" ref={pillGroupRef} role="tablist">
+            {(["day", "week", "month"] as CalView[]).map(v => (
+              <button key={v} className={`cal-pill${view === v ? " cal-pill--active" : ""}`}
+                data-cal-view={v} role="tab"
+                onClick={() => handleViewSwitch(v)}>
+                {v.charAt(0).toUpperCase() + v.slice(1)}
+              </button>
+            ))}
+            <span className="cal-pill-slider" style={sliderStyle} />
+          </div>
+
+          {/* New appointment */}
+          {canCreate && (
+            <button className="cal-add-btn"
+              onClick={() => setNewApptSlot({ empId: employees[0]?.id ?? 0, dateISO: calToISODate(currentDate), hour: 9 })}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              New appointment
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* View body */}
-      <div className="flex-1 overflow-hidden flex flex-col">
+      {/* Legend */}
+      <div className="cal-legend">
+        <span className="cal-legend-item"><span className="cal-legend-swatch cal-legend-swatch--appt" />Appointment</span>
+        <span className="cal-legend-item"><span className="cal-legend-swatch cal-legend-swatch--break" />Break</span>
+        <span className="cal-legend-item"><span className="cal-legend-swatch cal-legend-swatch--off" />Day off</span>
+      </div>
+
+      {/* Body */}
+      <div className="cal-body">
         {view === "day" && (
-          <DayView
-            dateISO={calToISODate(currentDate)}
-            dateObj={currentDate}
-            employees={visibleEmployees}
-            appointments={appointments}
-            hoursMap={hoursMap as Map<number, import("./api").CalWorkingHour[]>}
-            breaksMap={breaksMap as Map<number, import("./api").CalBreak[]>}
-            daysOffMap={daysOffMap as Map<number, import("./api").CalDayOff[]>}
-            businessHours={businessHours}
-            branchDaysOff={branchDaysOff}
-            agentTimeRef={agentTimeRef}
-            tz={tz}
-            canCreate={canCreate}
-            onSelectAppt={setViewAppt}
-            onSlotClick={handleSlotClick}
-          />
+          <DayView dateISO={calToISODate(currentDate)} dateObj={currentDate}
+            employees={visibleEmployees} appointments={appointments}
+            hoursMap={hoursMap} breaksMap={breaksMap} daysOffMap={daysOffMap}
+            businessHours={businessHours} branchDaysOff={branchDaysOff}
+            agentTimeRef={agentTimeRef} tz={tz} canCreate={canCreate}
+            onSelectAppt={setViewAppt} onSlotClick={handleSlotClick} />
         )}
 
         {view === "week" && selectedEmployee && (
-          <WeekView
-            currentDate={currentDate}
-            todayISO={todayISO}
-            employee={selectedEmployee}
+          <WeekView currentDate={currentDate} todayISO={todayISO} employee={selectedEmployee}
             appointments={appointments}
             hours={hoursMap.get(selectedEmployee.id) ?? []}
             breaks={breaksMap.get(selectedEmployee.id) ?? []}
             daysOff={daysOffMap.get(selectedEmployee.id) ?? []}
-            businessHours={businessHours}
-            branchDaysOff={branchDaysOff}
-            agentTimeRef={agentTimeRef}
-            tz={tz}
-            canCreate={canCreate}
-            onSelectAppt={setViewAppt}
-            onSlotClick={handleSlotClick}
-          />
+            businessHours={businessHours} branchDaysOff={branchDaysOff}
+            agentTimeRef={agentTimeRef} tz={tz} canCreate={canCreate}
+            onSelectAppt={setViewAppt} onSlotClick={handleSlotClick} />
         )}
 
         {view === "week" && !selectedEmployee && (
-          <div className="flex-1 flex items-center justify-center text-sm text-muted">
-            No employees found for this branch.
-          </div>
+          <p className="cal-loading-state">No employees found for this branch.</p>
         )}
 
         {view === "month" && (
-          <MonthView
-            currentDate={currentDate}
-            todayISO={todayISO}
-            employees={visibleEmployees}
-            appointments={appointments}
-            breaksMap={breaksMap as Map<number, import("./api").CalBreak[]>}
-            daysOffMap={daysOffMap as Map<number, import("./api").CalDayOff[]>}
-            businessHours={businessHours}
-            branchDaysOff={branchDaysOff}
-            tz={tz}
-            selectedEmpId={selectedEmpId}
+          <MonthView currentDate={currentDate} todayISO={todayISO}
+            employees={visibleEmployees} appointments={appointments}
+            breaksMap={breaksMap} daysOffMap={daysOffMap}
+            businessHours={businessHours} branchDaysOff={branchDaysOff}
+            tz={tz} selectedEmpId={selectedEmpId}
             onDayClick={iso => { setCurrentDate(calFromISODate(iso)); setView("day"); }}
-            onSelectAppt={setViewAppt}
-          />
+            onSelectAppt={setViewAppt} />
         )}
       </div>
 
       {/* New appointment modal */}
       {newApptSlot && (
-        <NewAppointmentModal
-          agentId={agentId}
-          tz={tz}
-          employees={bookableEmployees}
-          catalogue={catalogue}
-          prefillEmpId={newApptSlot.empId}
-          prefillDate={newApptSlot.dateISO}
-          prefillHour={newApptSlot.hour}
-          onClose={() => setNewApptSlot(null)}
-          onCreated={handleApptCreated}
-        />
+        <NewAppointmentModal agentId={agentId} tz={tz}
+          employees={bookableEmployees} catalogue={catalogue}
+          prefillEmpId={newApptSlot.empId} prefillDate={newApptSlot.dateISO} prefillHour={newApptSlot.hour}
+          onClose={() => setNewApptSlot(null)} onCreated={handleApptCreated} />
       )}
 
-      {/* Appointment detail drawer */}
+      {/* Appointment drawer */}
       {viewAppt && (
-        <AppointmentDrawer
-          appt={viewAppt}
-          tz={tz}
-          isStaff={false}
-          canUpdateStatus={canCreate}
+        <AppointmentDrawer appt={viewAppt} tz={tz}
+          isStaff={false} canUpdateStatus={canCreate}
           onClose={() => setViewAppt(null)}
-          onUpdated={(updated) => {
+          onUpdated={updated => {
             setViewAppt(updated);
             refetchAppts();
             qc.invalidateQueries({ queryKey: ["appointments"] });
-          }}
-        />
+          }} />
       )}
     </div>
   );
