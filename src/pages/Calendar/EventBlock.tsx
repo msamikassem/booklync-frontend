@@ -2,6 +2,23 @@ import { calApptLocalParts, calApptDuration, calApptShortTime, calSvcColorStyle,
 import type { AppointmentDetailResponse } from "./types";
 import type { CalBreak } from "./api";
 
+// Solid palette — applied via inline style so CSS load order can never override them
+const PALETTE = [
+  "#0ea5e9", // sky
+  "#10b981", // emerald
+  "#ec4899", // pink
+  "#d946ef", // fuchsia
+  "#f59e0b", // amber
+  "#f97316", // orange
+  "#8b5cf6", // violet
+  "#84cc16", // lime
+];
+
+function paletteColor(cls: string): string {
+  const idx = parseInt(cls.replace("c", ""), 10);
+  return PALETTE[isNaN(idx) ? 0 : idx % PALETTE.length];
+}
+
 interface Props {
   appt: AppointmentDetailResponse;
   pxPerMin: number;
@@ -26,7 +43,9 @@ export function EventBlock({ appt, pxPerMin, startHour, hourCount, todayBreaks, 
 
   const status   = appt.status ?? "pending";
   const colorCls = calServiceColorClass(appt);
-  const svcStyle = calSvcColorStyle(appt.service_color ?? null);
+  const svcBg    = calSvcColorStyle(appt.service_color ?? null);
+  const bg       = svcBg || paletteColor(colorCls);
+
   const startStr = calApptShortTime(appt, "start", tz);
   const endStr   = calApptShortTime(appt, "end", tz);
   const timeStr  = endStr ? `${startStr} – ${endStr}` : startStr;
@@ -46,11 +65,10 @@ export function EventBlock({ appt, pxPerMin, startHour, hourCount, todayBreaks, 
     : prepAfter  > 0 ? "6px 6px 0 0"
     : "";
 
-  const evColorClass  = svcStyle ? "" : `cal-event--${colorCls}`;
   const evStyle: React.CSSProperties = {
     top, height,
+    background: bg,
     ...(evRadius ? { borderRadius: evRadius } : {}),
-    ...(svcStyle ? { background: svcStyle } : {}),
   };
 
   return (
@@ -60,16 +78,11 @@ export function EventBlock({ appt, pxPerMin, startHour, hourCount, todayBreaks, 
         let st = top - sh, vh = sh;
         if (st < 0) { vh += st; st = 0; }
         if (vh < 3) return null;
-        const stripClass = svcStyle ? "" : `cal-event--${colorCls}`;
-        const stripStyle: React.CSSProperties = {
-          top: st, height: vh, borderRadius: "6px 6px 0 0",
-          ...(svcStyle ? { background: svcStyle } : {}),
-        };
-        return <div className={`cal-prep-strip ${stripClass}`} style={stripStyle} />;
+        return <div className="cal-prep-strip" style={{ top: st, height: vh, borderRadius: "6px 6px 0 0", background: bg }} />;
       })()}
 
       <div
-        className={`cal-event ${evColorClass} cal-event--${status}${hasBreakConflict ? " cal-event--conflict" : ""}`}
+        className={`cal-event cal-event--${status}${hasBreakConflict ? " cal-event--conflict" : ""}`}
         style={evStyle}
         data-appt-id={appt.id}
         onClick={(e) => { e.stopPropagation(); onClick(); }}
@@ -85,12 +98,7 @@ export function EventBlock({ appt, pxPerMin, startHour, hourCount, todayBreaks, 
 
       {prepAfter > 0 && (() => {
         const sh = Math.max(3, Math.round(prepAfter * pxPerMin));
-        const stripClass = svcStyle ? "" : `cal-event--${colorCls}`;
-        const stripStyle: React.CSSProperties = {
-          top: top + height, height: sh, borderRadius: "0 0 6px 6px",
-          ...(svcStyle ? { background: svcStyle } : {}),
-        };
-        return <div className={`cal-prep-strip ${stripClass}`} style={stripStyle} />;
+        return <div className="cal-prep-strip" style={{ top: top + height, height: sh, borderRadius: "0 0 6px 6px", background: bg }} />;
       })()}
     </>
   );

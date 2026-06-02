@@ -8,6 +8,12 @@ import type { BusinessHourResponse } from "../../api/types";
 
 const DOW_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+const PALETTE = ["#0ea5e9","#10b981","#ec4899","#d946ef","#f59e0b","#f97316","#8b5cf6","#84cc16"];
+function paletteColor(cls: string): string {
+  const idx = parseInt(cls.replace("c",""), 10);
+  return PALETTE[isNaN(idx) ? 0 : idx % PALETTE.length];
+}
+
 interface Props {
   currentDate: Date;
   todayISO: string;
@@ -94,20 +100,17 @@ export function MonthView({
 
         <div className="cal-month-pills">
           {visible.map(a => {
-            const status    = a.status ?? "pending";
-            const colorCls  = calServiceColorClass(a);
-            const svcStyle  = calSvcColorStyle(a.service_color ?? null);
+            const status   = a.status ?? "pending";
+            const colorCls = calServiceColorClass(a);
+            const svcStyle = calSvcColorStyle(a.service_color ?? null);
+            const bg       = svcStyle || paletteColor(colorCls);
             const pillClass = [
               "cal-month-pill",
-              svcStyle ? "" : `cal-month-pill--${colorCls}`,
               `cal-month-pill--${status}`,
               cellConflict ? "cal-month-pill--conflict" : "",
             ].filter(Boolean).join(" ");
-            const inlineStyle = svcStyle
-              ? { background: svcStyle }
-              : undefined;
             return (
-              <span key={a.id} className={pillClass} style={inlineStyle}
+              <span key={a.id} className={pillClass} style={{ background: bg }}
                 onClick={e => { e.stopPropagation(); onSelectAppt(a); }}>
                 <span className="cal-month-pill-time">{calApptShortTime(a, "start", tz)}</span>
                 <span className="cal-month-pill-name">{a.customer_name ?? "Customer"}</span>
