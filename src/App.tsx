@@ -12,6 +12,7 @@ import Services from "./pages/Services";
 import Branches from "./pages/Branches";
 import Employees from "./pages/Employees";
 import Appointments from "./pages/Appointments";
+import Calendar from "./pages/Calendar";
 import Placeholder from "./pages/Placeholder";
 
 const queryClient = new QueryClient({
@@ -41,7 +42,7 @@ function AppRoutes() {
           <Route index element={<Overview />} />
           <Route path="customers" element={<Customers />} />
           <Route path="appointments" element={<Appointments />} />
-          <Route path="calendar" element={<Placeholder name="Calendar" />} />
+          <Route path="calendar" element={<Calendar />} />
           <Route path="branches" element={<Branches />} />
           <Route path="employees" element={<Employees />} />
           <Route path="services" element={<Services />} />

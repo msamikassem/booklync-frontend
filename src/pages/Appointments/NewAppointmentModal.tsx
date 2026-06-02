@@ -25,23 +25,28 @@ interface Props {
   tz: string;
   employees: ApptEmployee[];
   catalogue: ServiceCatalogueResponse | undefined;
+  prefillEmpId?: number;
+  prefillDate?: string;
+  prefillHour?: number;
   onClose: () => void;
   onCreated: (appt: AppointmentDetailResponse) => void;
 }
 
-export function NewAppointmentModal({ agentId, tz, employees, catalogue, onClose, onCreated }: Props) {
-  // Default to next hour in agent tz
-  const defaultLocal = utcToLocalInput(
-    (() => { const d = new Date(); d.setMinutes(0, 0, 0); d.setHours(d.getHours() + 1); return d.toISOString(); })(),
-    tz
-  );
+export function NewAppointmentModal({ agentId, tz, employees, catalogue, prefillEmpId, prefillDate, prefillHour, onClose, onCreated }: Props) {
+  // Default to next hour in agent tz (or prefilled slot)
+  const defaultLocal = (prefillDate && prefillHour != null)
+    ? `${prefillDate}T${String(prefillHour).padStart(2,"0")}:00`
+    : utcToLocalInput(
+        (() => { const d = new Date(); d.setMinutes(0, 0, 0); d.setHours(d.getHours() + 1); return d.toISOString(); })(),
+        tz
+      );
   const [datePart, timePart] = defaultLocal.split("T");
 
   const [customerId, setCustomerId] = useState("");
   const [customerDisplay, setCustomerDisplay] = useState("");
   const [serviceId, setServiceId] = useState("");
   const [variationId, setVariationId] = useState("");
-  const [employeeId, setEmployeeId] = useState("");
+  const [employeeId, setEmployeeId] = useState(prefillEmpId ? String(prefillEmpId) : "");
   const [date, setDate] = useState(datePart);
   const [time, setTime] = useState(timePart);
   const [note, setNote] = useState("");
