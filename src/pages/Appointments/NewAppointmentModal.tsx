@@ -14,6 +14,7 @@ import { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { appointmentsApi } from "./api";
 import { customers as customersApi, services as servicesApi } from "../../api";
+import { employeesApi } from "../Employees/api";
 import { formatApiError } from "../../lib/errors";
 import { localInputToUtc, utcToLocalInput, extractPrepSuggestedTime } from "./utils";
 import type { AppointmentDetailResponse, ApptEmployee, ApiError } from "./types";
@@ -85,9 +86,14 @@ export function NewAppointmentModal({ agentId, tz, employees, catalogue, onClose
     ? employees.filter(e => svcEmployees.some(se => se.id === e.id))
     : employees;
 
-  // Extra price for selected employee from service employee data
-  const empExtraFromSvc = svcEmployees?.find(se => String(se.id) === employeeId);
-  const extraPrice = empExtraFromSvc ? parseFloat(empExtraFromSvc.extra_price as string ?? "0") : 0;
+  // Employee capabilities for accurate extra-price lookup.
+  // Mirrors _updateApptPriceDisplay: variation_id → service_id → title_id (most specific wins).
+  const { data: empCaps = [] } = useQuery({
+    queryKey: ["emp-caps", Number(employeeId), agentId],
+    queryFn: () => employeesApi.getCapabilities(Number(employeeId), agentId),
+    enabled: !!employeeId,
+    staleTime: 5 * 60 * 1000,
+  });
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -117,6 +123,15 @@ export function NewAppointmentModal({ agentId, tz, employees, catalogue, onClose
       ? parseFloat((selectedSvc.price ?? "0") as string)
       : null;
   const durMins = selectedVar?.duration_minutes ?? (selectedSvc && !hasVariations ? selectedSvc.duration_minutes : null);
+
+  // Resolve extra price: variation_id → service_id → title_id (same precedence as old app)
+  let extraPrice = 0;
+  if (empCaps.length && serviceId) {
+    let cap = variationId ? empCaps.find(c => c.variation_id === Number(variationId)) : null;
+    if (!cap) cap = empCaps.find(c => c.service_id === Number(serviceId));
+    if (!cap && selectedSvc?.title_id) cap = empCaps.find(c => c.title_id === selectedSvc.title_id);
+    if (cap) extraPrice = parseFloat(cap.extra_price as string ?? "0");
+  }
 
   const totalPrice = basePrice !== null ? basePrice + extraPrice : null;
   const showPriceStrip = totalPrice !== null && !!serviceId && !!employeeId && (!hasVariations || !!variationId);
