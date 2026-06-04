@@ -38,16 +38,18 @@ export function BundlesTab({ agentId, currency, tz, canCheckout }: Props) {
     staleTime: 30 * 1000,
   });
 
-  const { data: custList = [] } = useQuery({
+  // ['customers'] cache holds the full { customers, total } object (owned by the
+  // Customers screen) — read .customers, never assume a bare array.
+  const { data: custData } = useQuery({
     queryKey: ["customers"],
-    queryFn: async () => { try { return (await customersApi.list()).customers ?? []; } catch { return []; } },
+    queryFn: () => customersApi.list(),
     staleTime: 5 * 60 * 1000,
   });
   const custName = useMemo(() => {
     const map = new Map<number, string>();
-    custList.forEach(c => map.set(c.id, c.name || c.phone || `Customer #${c.id}`));
+    (custData?.customers ?? []).forEach(c => map.set(c.id, c.name || c.phone || `Customer #${c.id}`));
     return (id?: number | null) => id ? (map.get(id) ?? `Customer #${id}`) : "Walk-in";
-  }, [custList]);
+  }, [custData]);
 
   const combos = bundles.filter(b => b.kind === "combo");
   const packages = bundles.filter(b => b.kind === "package");

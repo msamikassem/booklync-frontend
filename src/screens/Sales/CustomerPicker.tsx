@@ -22,11 +22,14 @@ export function CustomerPicker({ value, onSelect, placeholder = "Search customer
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  const { data: customers = [] } = useQuery({
+  // ['customers'] cache holds the full { customers, total } object (owned by the
+  // Customers screen) — read .customers, never assume a bare array.
+  const { data: custData } = useQuery({
     queryKey: ["customers"],
-    queryFn: () => customersApi.list().then(d => d.customers ?? []),
+    queryFn: () => customersApi.list(),
     staleTime: 5 * 60 * 1000,
   });
+  const customers = useMemo(() => custData?.customers ?? [], [custData]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();

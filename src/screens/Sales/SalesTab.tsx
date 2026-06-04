@@ -48,18 +48,18 @@ export function SalesTab({ agentId, canCheckout }: Props) {
   });
 
   // Customer id → display name (tenant-wide; reuses the ['customers'] cache).
-  const { data: custList = [] } = useQuery({
+  // That cache is OWNED by the Customers screen and holds the full
+  // { customers, total } object — read .customers, never assume a bare array.
+  const { data: custData } = useQuery({
     queryKey: ["customers"],
-    queryFn: async () => {
-      try { return (await customersApi.list()).customers ?? []; } catch { return []; }
-    },
+    queryFn: () => customersApi.list(),
     staleTime: 5 * 60 * 1000,
   });
   const custName = useMemo(() => {
     const map = new Map<number, string>();
-    custList.forEach(c => map.set(c.id, c.name || c.phone || `Customer #${c.id}`));
+    (custData?.customers ?? []).forEach(c => map.set(c.id, c.name || c.phone || `Customer #${c.id}`));
     return (id?: number | null) => id ? (map.get(id) ?? `Customer #${id}`) : "Walk-in";
-  }, [custList]);
+  }, [custData]);
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
