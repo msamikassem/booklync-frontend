@@ -17,6 +17,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AgentProvider } from "@/contexts/AgentContext";
 import { Toaster } from "@/components/ui/toaster";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
 /** Provides the active-branch context once auth has resolved the agent list. */
 function AgentLayer({ children }: { children: React.ReactNode }) {
@@ -54,6 +55,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <AgentLayer>{children}</AgentLayer>
       </AuthProvider>
       <Toaster />
+      {process.env.NODE_ENV === "development" && (
+        <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
+      )}
     </QueryClientProvider>
   );
 }
