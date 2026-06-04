@@ -13,8 +13,11 @@ import { employeesApi } from "./api";
 import { formatApiError } from "../../lib/errors";
 import type { EmployeeResponse, ApiError } from "./types";
 import type { AgentResponse } from "../../api/types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Search } from "lucide-react";
 
-const iCls = "w-full h-9 px-3 border border-hairline rounded-md text-sm bg-canvas text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors";
+const iCls = "w-full h-9 px-3 border border-input rounded-md text-sm bg-transparent text-ink placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring transition-colors";
 
 interface Props {
   agentId: number;
@@ -214,11 +217,10 @@ export function AddEmployeeForm({ agentId, agents, currentAgentEmployeeIds, onSa
           )}
 
           <div className="flex gap-2">
-            <button onClick={handleNewSave} disabled={saving}
-              className="flex-1 h-9 bg-primary hover:bg-primary-hover text-white text-sm font-medium rounded-md disabled:opacity-60 transition-colors">
+            <Button onClick={handleNewSave} disabled={saving} className="flex-1">
               {saving ? "Adding…" : "Add employee"}
-            </button>
-            <button onClick={onCancel} className="h-9 px-4 border border-hairline text-sm text-ink rounded-md hover:bg-surface-soft">Cancel</button>
+            </Button>
+            <Button variant="outline" onClick={onCancel}>Cancel</Button>
           </div>
         </div>
       )}
@@ -227,9 +229,8 @@ export function AddEmployeeForm({ agentId, agents, currentAgentEmployeeIds, onSa
       {mode === "existing" && (
         <div className="flex flex-col gap-4">
           <div className="relative">
-            <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted pointer-events-none" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or role…"
-              className="w-full h-9 pl-8 pr-3 border border-hairline rounded-md text-sm bg-canvas focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none h-3.5 w-3.5" />
+            <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or role…" className="pl-9" />
           </div>
 
           {othersLoading && <p className="text-sm text-muted">Loading…</p>}
@@ -264,11 +265,10 @@ export function AddEmployeeForm({ agentId, agents, currentAgentEmployeeIds, onSa
           )}
 
           <div className="flex gap-2">
-            <button onClick={handleExistingSave} disabled={saving || selectedCandidate == null}
-              className="flex-1 h-9 bg-primary hover:bg-primary-hover text-white text-sm font-medium rounded-md disabled:opacity-60 transition-colors">
+            <Button onClick={handleExistingSave} disabled={saving || selectedCandidate == null} className="flex-1">
               {saving ? "Adding…" : "Add to branch"}
-            </button>
-            <button onClick={onCancel} className="h-9 px-4 border border-hairline text-sm text-ink rounded-md hover:bg-surface-soft">Cancel</button>
+            </Button>
+            <Button variant="outline" onClick={onCancel}>Cancel</Button>
           </div>
         </div>
       )}

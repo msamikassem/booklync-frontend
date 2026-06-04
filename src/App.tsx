@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "./contexts/AuthContext";
 import { AgentProvider } from "./contexts/AgentContext";
@@ -13,7 +13,15 @@ import Branches from "./pages/Branches";
 import Employees from "./pages/Employees";
 import Appointments from "./pages/Appointments";
 import Calendar from "./pages/Calendar";
-import Placeholder from "./pages/Placeholder";
+import Sales from "./pages/Sales";
+import StaffDashboard from "./pages/Staff";
+import AcceptInvite from "./pages/AcceptInvite";
+import Conversations from "./pages/Conversations";
+import BookingPage from "./pages/BookingPage";
+import Team from "./pages/Team";
+import AIAgent from "./pages/AIAgent";
+import PublicBooking from "./pages/PublicBooking";
+import { Toaster } from "@/components/ui/toaster";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -21,12 +29,53 @@ const queryClient = new QueryClient({
   },
 });
 
-function AppRoutes() {
-  const { agents } = useAuth();
+// Hostnames that belong to Booklync itself (the dashboard host). Anything else
+// is treated as a customer's verified custom domain, where the whole app IS the
+// public booking page (no router, no auth). Raw IPs (LAN dev) and *.vercel.app
+// count as Booklync hosts so the dashboard stays reachable there — preview a
+// booking page via /b/:slug.
+const BOOKLYNC_HOSTS = new Set([
+  "localhost",
+  "127.0.0.1",
+  "booklync.com",
+  "www.booklync.com",
+]);
 
+function isBooklyncHost(h: string): boolean {
+  return (
+    BOOKLYNC_HOSTS.has(h) ||
+    h.endsWith(".vercel.app") ||
+    /^\d{1,3}(\.\d{1,3}){3}$/.test(h)
+  );
+}
+
+/** Provides the active-branch context once auth has resolved the agent list. */
+function AgentLayer() {
+  const { agents } = useAuth();
   return (
     <AgentProvider agents={agents}>
-      <Routes>
+      <Outlet />
+    </AgentProvider>
+  );
+}
+
+/** Wraps every authenticated route in the auth + agent providers. */
+function AuthBoundary() {
+  return (
+    <AuthProvider>
+      <AgentLayer />
+    </AuthProvider>
+  );
+}
+
+function AppRoutes() {
+  return (
+    <Routes>
+      {/* Public, unauthenticated booking page — rendered OUTSIDE AuthProvider. */}
+      <Route path="/b/:slug" element={<PublicBooking />} />
+
+      {/* Everything else is the authenticated dashboard app. */}
+      <Route element={<AuthBoundary />}>
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
@@ -46,11 +95,11 @@ function AppRoutes() {
           <Route path="branches" element={<Branches />} />
           <Route path="employees" element={<Employees />} />
           <Route path="services" element={<Services />} />
-          <Route path="sales" element={<Placeholder name="Sales" />} />
-          <Route path="team" element={<Placeholder name="Team" />} />
-          <Route path="booking-page" element={<Placeholder name="Booking Page" />} />
-          <Route path="conversations" element={<Placeholder name="Conversations" />} />
-          <Route path="ai-agent" element={<Placeholder name="AI Agent" />} />
+          <Route path="sales" element={<Sales />} />
+          <Route path="team" element={<Team />} />
+          <Route path="booking-page" element={<BookingPage />} />
+          <Route path="conversations" element={<Conversations />} />
+          <Route path="ai-agent" element={<AIAgent />} />
         </Route>
 
         {/* Staff own-calendar view */}
@@ -58,28 +107,29 @@ function AppRoutes() {
           path="/staff"
           element={
             <RouteGuard role="staff">
-              <Placeholder name="Staff Dashboard" />
+              <StaffDashboard />
             </RouteGuard>
           }
         />
 
-        {/* Accept invite — unauthenticated */}
-        <Route path="/accept-invite" element={<Placeholder name="Accept Invite" />} />
+        {/* Accept invite — unauthenticated form, but lives under the providers */}
+        <Route path="/accept-invite" element={<AcceptInvite />} />
 
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
-    </AgentProvider>
+      </Route>
+    </Routes>
   );
 }
 
 export default function App() {
+  // On a customer's custom domain the entire app is the public booking page.
+  const onCustomDomain =
+    typeof window !== "undefined" && !isBooklyncHost(window.location.hostname);
+
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AuthProvider>
-          <AppRoutes />
-        </AuthProvider>
-      </BrowserRouter>
+      <BrowserRouter>{onCustomDomain ? <PublicBooking /> : <AppRoutes />}</BrowserRouter>
+      <Toaster />
     </QueryClientProvider>
   );
 }

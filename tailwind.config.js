@@ -8,12 +8,28 @@ export default {
   theme: {
     extend: {
       colors: {
+        /* shadcn/ui CSS-variable tokens */
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
+        card: { DEFAULT: "hsl(var(--card))", foreground: "hsl(var(--card-foreground))" },
+        popover: { DEFAULT: "hsl(var(--popover))", foreground: "hsl(var(--popover-foreground))" },
+        secondary: { DEFAULT: "hsl(var(--secondary))", foreground: "hsl(var(--secondary-foreground))" },
+        destructive: { DEFAULT: "hsl(var(--destructive))", foreground: "hsl(var(--destructive-foreground))" },
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        /* Our existing design tokens */
         primary: {
           DEFAULT: "#2563EB",
+          foreground: "#ffffff",
           hover: "#1D4ED8",
           active: "#1E40AF",
         },
-        accent: "#7C3AED",
+        accent: {
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))",
+          brand: "#7C3AED",
+        },
         canvas: "#ffffff",
         "surface-soft": "#f8f9fa",
         "surface-card": "#F8FAFC",
@@ -44,9 +60,9 @@ export default {
         mono: ["JetBrains Mono", "ui-monospace", "SF Mono", "Menlo", "monospace"],
       },
       borderRadius: {
-        sm: "6px",
-        md: "8px",
-        lg: "12px",
+        lg: "var(--radius)",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
         xl: "16px",
         "2xl": "20px",
         pill: "9999px",

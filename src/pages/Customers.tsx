@@ -1,23 +1,20 @@
-/**
- * Customers screen — port of dashboard-customers.js.
- *
- * Behaviours reproduced exactly:
- * - Load all customers, filter/sort client-side
- * - Click row → slide-in drawer with Edit / History / Delete tabs
- * - Edit: dirty-detection, save/reset row only when changed, phone E.164 build
- * - History tab: lazy-load appointment list per customer (TTL via TanStack Query)
- * - Delete: two-step inline confirmation (4 s auto-reset)
- * - Add modal: name required, 10-digit phone validated, phone built to E.164
- * - RBAC: manage_customers gates add button + disables edit/delete; view_customers needed to render
- */
-
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customers as customersApi } from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import { formatApiError } from "../lib/errors";
-import { getInitials, avatarColor, stripE164, buildPhone, validatePhone, fmtDate } from "../lib/utils";
+import { cn, getInitials, avatarColor, stripE164, buildPhone, validatePhone, fmtDate } from "../lib/utils";
 import type { CustomerResponse, AppointmentDetailResponse, ApiError } from "../api/types";
+import { Sheet, SheetContent, SheetClose } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { X, Plus, Search } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -29,12 +26,12 @@ const SOURCE_LABEL: Record<string, string> = {
   ai: "AI", sms: "SMS", dashboard: "Dashboard",
   booking_page: "Booking page", manual: "Manual",
 };
-const STATUS_COLORS: Record<string, string> = {
-  pending: "bg-yellow-100 text-yellow-800",
-  confirmed: "bg-blue-100 text-blue-800",
-  cancelled: "bg-gray-100 text-gray-500",
-  completed: "bg-green-100 text-green-800",
-  no_show: "bg-red-100 text-red-700",
+const STATUS_BADGE: Record<string, string> = {
+  pending: "bg-yellow-100 text-yellow-800 border-transparent hover:bg-yellow-100",
+  confirmed: "bg-blue-100 text-blue-800 border-transparent hover:bg-blue-100",
+  cancelled: "bg-gray-100 text-gray-500 border-transparent hover:bg-gray-100",
+  completed: "bg-green-100 text-green-800 border-transparent hover:bg-green-100",
+  no_show: "bg-red-100 text-red-700 border-transparent hover:bg-red-100",
 };
 
 // ── Appointment row (drawer history tab) ──────────────────────────────────────
@@ -62,9 +59,9 @@ function ApptRow({ appt }: { appt: AppointmentDetailResponse }) {
           )}
         </div>
       </div>
-      <span className={`text-xs font-medium px-2 py-0.5 rounded-pill flex-shrink-0 ${STATUS_COLORS[status] ?? "bg-gray-100 text-gray-600"}`}>
+      <Badge className={cn("rounded-full text-[10px] font-medium", STATUS_BADGE[status] ?? "bg-gray-100 text-gray-600 border-transparent")}>
         {STATUS_LABEL[status] || status}
-      </span>
+      </Badge>
     </div>
   );
 }
@@ -73,22 +70,19 @@ function ApptRow({ appt }: { appt: AppointmentDetailResponse }) {
 
 type DrawerTab = "edit" | "history" | "danger";
 
-function CustomerDrawer({
+function CustomerDrawerContent({
   cust,
   canManage,
-  onClose,
   onUpdated,
   onDeleted,
 }: {
   cust: CustomerResponse;
   canManage: boolean;
-  onClose: () => void;
   onUpdated: (c: CustomerResponse) => void;
   onDeleted: (id: number) => void;
 }) {
   const [tab, setTab] = useState<DrawerTab>("edit");
 
-  // Edit form state
   const orig = {
     name: cust.name || "",
     phone: stripE164(cust.phone),
@@ -103,13 +97,8 @@ function CustomerDrawer({
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleteErr, setDeleteErr] = useState<string | null>(null);
 
-  const dirty =
-    name !== orig.name ||
-    phone !== orig.phone ||
-    email !== orig.email ||
-    notes !== orig.notes;
+  const dirty = name !== orig.name || phone !== orig.phone || email !== orig.email || notes !== orig.notes;
 
-  // Appointment history query — only fetches when history tab is open
   const { data: appts, isLoading: apptLoading, isError: apptError } = useQuery({
     queryKey: ["customer-appointments", cust.id],
     queryFn: () => customersApi.getAppointments(cust.id),
@@ -120,10 +109,7 @@ function CustomerDrawer({
   const updateMut = useMutation({
     mutationFn: (body: { name: string; phone: string | null; email: string | null; notes: string | null }) =>
       customersApi.update(cust.id, body),
-    onSuccess: (updated) => {
-      onUpdated(updated);
-      setEditErr(null);
-    },
+    onSuccess: (updated) => { onUpdated(updated); setEditErr(null); },
     onError: (err: unknown) => {
       const data = (err as { data?: ApiError }).data;
       setEditErr(formatApiError(data ?? {}, "Could not save changes."));
@@ -144,26 +130,15 @@ function CustomerDrawer({
     const phoneErr = validatePhone(phone);
     if (phoneErr) { setEditErr(phoneErr); return; }
     setEditErr(null);
-    updateMut.mutate({
-      name: name.trim(),
-      phone: buildPhone(phone),
-      email: email.trim() || null,
-      notes: notes.trim() || null,
-    });
+    updateMut.mutate({ name: name.trim(), phone: buildPhone(phone), email: email.trim() || null, notes: notes.trim() || null });
   }
 
   function handleReset() {
-    setName(orig.name); setPhone(orig.phone);
-    setEmail(orig.email); setNotes(orig.notes);
-    setEditErr(null);
+    setName(orig.name); setPhone(orig.phone); setEmail(orig.email); setNotes(orig.notes); setEditErr(null);
   }
 
   function handleDeleteClick() {
-    if (!deleteConfirm) {
-      setDeleteConfirm(true);
-      setTimeout(() => setDeleteConfirm(false), 4000);
-      return;
-    }
+    if (!deleteConfirm) { setDeleteConfirm(true); setTimeout(() => setDeleteConfirm(false), 4000); return; }
     setDeleteErr(null);
     deleteMut.mutate();
   }
@@ -174,151 +149,107 @@ function CustomerDrawer({
 
   return (
     <>
-      {/* Overlay */}
-      <div
-        className="fixed inset-0 bg-black/20 z-40 transition-opacity"
-        onClick={onClose}
-      />
-
-      {/* Drawer */}
-      <aside className="fixed right-0 top-0 h-full w-96 max-w-full bg-canvas shadow-lg z-50 flex flex-col">
-        {/* Header */}
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-hairline">
-          <div
-            className="w-10 h-10 rounded-full flex-shrink-0 grid place-items-center text-sm font-semibold text-white"
-            style={{ background: color }}
-          >
+      {/* Header */}
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-hairline flex-shrink-0">
+        <Avatar className="h-10 w-10 flex-shrink-0">
+          <AvatarFallback style={{ background: color }} className="text-white text-sm font-semibold">
             {initials}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="font-semibold text-ink truncate">{cust.name || "—"}</div>
-            <div className="text-xs text-muted truncate">{sub}</div>
-          </div>
-          <button onClick={onClose} className="text-muted hover:text-ink p-1 rounded-md hover:bg-surface-soft transition-colors">
-            <CloseIcon />
+          </AvatarFallback>
+        </Avatar>
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-ink truncate">{cust.name || "—"}</div>
+          <div className="text-xs text-muted truncate">{sub}</div>
+        </div>
+        <SheetClose asChild>
+          <Button variant="ghost" size="icon" className="text-muted hover:text-ink h-8 w-8">
+            <X className="h-4 w-4" />
+          </Button>
+        </SheetClose>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border-b border-hairline px-5 flex-shrink-0">
+        {(["edit", "history", "danger"] as DrawerTab[]).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={cn(
+              "pb-3 pt-3 mr-5 text-sm font-medium border-b-2 transition-colors capitalize",
+              tab === t
+                ? t === "danger" ? "border-error text-error" : "border-primary text-primary"
+                : "border-transparent text-muted hover:text-ink",
+              t === "danger" && !canManage ? "hidden" : "",
+            )}
+          >
+            {t === "danger" ? "Delete" : t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
-        </div>
+        ))}
+      </div>
 
-        {/* Tabs */}
-        <div className="flex border-b border-hairline px-5">
-          {(["edit", "history", "danger"] as DrawerTab[]).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={[
-                "pb-3 pt-3 mr-5 text-sm font-medium border-b-2 transition-colors capitalize",
-                tab === t
-                  ? t === "danger"
-                    ? "border-error text-error"
-                    : "border-primary text-primary"
-                  : "border-transparent text-muted hover:text-ink",
-                t === "danger" && !canManage ? "hidden" : "",
-              ].join(" ")}
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto px-5 py-4">
+        {/* Edit tab */}
+        {tab === "edit" && (
+          <div className="flex flex-col gap-4">
+            <FormField label="Name" required>
+              <Input value={name} onChange={(e) => setName(e.target.value)} disabled={!canManage} placeholder="John Smith" />
+            </FormField>
+            <FormField label="Phone">
+              <Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} disabled={!canManage} placeholder="(555) 000-0000" maxLength={14} />
+            </FormField>
+            <FormField label="Email">
+              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} disabled={!canManage} placeholder="john@example.com" />
+            </FormField>
+            <FormField label="Notes">
+              <textarea
+                value={notes} onChange={(e) => setNotes(e.target.value)}
+                disabled={!canManage} placeholder="Preferences, allergies…" rows={3}
+                className="w-full px-3 py-2 border border-input rounded-md text-sm bg-transparent text-ink placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+              />
+            </FormField>
+
+            {editErr && <p className="text-sm text-error bg-red-50 border border-red-200 rounded-md px-3 py-2">{editErr}</p>}
+
+            {dirty && canManage && (
+              <div className="flex gap-2">
+                <Button onClick={handleSave} disabled={updateMut.isPending} className="flex-1">
+                  {updateMut.isPending ? "Saving…" : "Save changes"}
+                </Button>
+                <Button variant="outline" onClick={handleReset} disabled={updateMut.isPending}>Reset</Button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* History tab */}
+        {tab === "history" && (
+          <div>
+            {apptLoading && <p className="text-sm text-muted py-4">Loading…</p>}
+            {apptError && <p className="text-sm text-error py-4">Could not load appointments.</p>}
+            {appts && appts.length === 0 && <p className="text-sm text-muted py-4">No appointments on record.</p>}
+            {appts && appts.length > 0 && appts.map((a) => <ApptRow key={a.id} appt={a} />)}
+          </div>
+        )}
+
+        {/* Danger tab */}
+        {tab === "danger" && canManage && (
+          <div className="pt-2">
+            <p className="font-semibold text-ink mb-1">Delete customer</p>
+            <p className="text-sm text-muted mb-4">
+              This will permanently delete this customer and all associated data. This cannot be undone.
+            </p>
+            {deleteErr && <p className="text-sm text-error bg-red-50 border border-red-200 rounded-md px-3 py-2 mb-4">{deleteErr}</p>}
+            <Button
+              onClick={handleDeleteClick}
+              disabled={deleteMut.isPending}
+              variant={deleteConfirm ? "destructive" : "outline"}
+              className={cn("w-full", !deleteConfirm && "border-error text-error hover:bg-red-50 hover:text-error")}
             >
-              {t === "danger" ? "Delete" : t.charAt(0).toUpperCase() + t.slice(1)}
-            </button>
-          ))}
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-5 py-4">
-          {/* Edit tab */}
-          {tab === "edit" && (
-            <div className="flex flex-col gap-4">
-              <Field label="Name" required>
-                <input
-                  type="text" value={name} onChange={(e) => setName(e.target.value)}
-                  disabled={!canManage} placeholder="John Smith"
-                  className={inputCls(!canManage)}
-                />
-              </Field>
-              <Field label="Phone">
-                <input
-                  type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
-                  disabled={!canManage} placeholder="(555) 000-0000" maxLength={14}
-                  className={inputCls(!canManage)}
-                />
-              </Field>
-              <Field label="Email">
-                <input
-                  type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                  disabled={!canManage} placeholder="john@example.com"
-                  className={inputCls(!canManage)}
-                />
-              </Field>
-              <Field label="Notes">
-                <textarea
-                  value={notes} onChange={(e) => setNotes(e.target.value)}
-                  disabled={!canManage} placeholder="Preferences, allergies…" rows={3}
-                  className={inputCls(!canManage) + " resize-none"}
-                />
-              </Field>
-
-              {editErr && <p className="text-sm text-error bg-red-50 border border-red-200 rounded-md px-3 py-2">{editErr}</p>}
-
-              {dirty && canManage && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleSave}
-                    disabled={updateMut.isPending}
-                    className="flex-1 h-9 bg-primary hover:bg-primary-hover text-white text-sm font-medium rounded-md disabled:opacity-60 transition-colors"
-                  >
-                    {updateMut.isPending ? "Saving…" : "Save changes"}
-                  </button>
-                  <button
-                    onClick={handleReset}
-                    disabled={updateMut.isPending}
-                    className="h-9 px-4 border border-hairline text-sm text-ink rounded-md hover:bg-surface-soft transition-colors"
-                  >
-                    Reset
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* History tab */}
-          {tab === "history" && (
-            <div>
-              {apptLoading && <p className="text-sm text-muted py-4">Loading…</p>}
-              {apptError && <p className="text-sm text-error py-4">Could not load appointments.</p>}
-              {appts && appts.length === 0 && (
-                <p className="text-sm text-muted py-4">No appointments on record.</p>
-              )}
-              {appts && appts.length > 0 && appts.map((a) => (
-                <ApptRow key={a.id} appt={a} />
-              ))}
-            </div>
-          )}
-
-          {/* Danger tab */}
-          {tab === "danger" && canManage && (
-            <div className="pt-2">
-              <p className="font-semibold text-ink mb-1">Delete customer</p>
-              <p className="text-sm text-muted mb-4">
-                This will permanently delete this customer and all associated data. This cannot be undone.
-              </p>
-              {deleteErr && <p className="text-sm text-error bg-red-50 border border-red-200 rounded-md px-3 py-2 mb-4">{deleteErr}</p>}
-              <button
-                onClick={handleDeleteClick}
-                disabled={deleteMut.isPending}
-                className={[
-                  "w-full h-9 text-sm font-medium rounded-md transition-colors disabled:opacity-60",
-                  deleteConfirm
-                    ? "bg-error text-white hover:bg-red-700"
-                    : "border border-error text-error hover:bg-red-50",
-                ].join(" ")}
-              >
-                {deleteMut.isPending
-                  ? "Deleting…"
-                  : deleteConfirm
-                  ? "Are you sure? Click again to confirm."
-                  : "Delete customer"}
-              </button>
-            </div>
-          )}
-        </div>
-      </aside>
+              {deleteMut.isPending ? "Deleting…" : deleteConfirm ? "Are you sure? Click again to confirm." : "Delete customer"}
+            </Button>
+          </div>
+        )}
+      </div>
     </>
   );
 }
@@ -326,10 +257,12 @@ function CustomerDrawer({
 // ── Add customer modal ────────────────────────────────────────────────────────
 
 function AddCustomerModal({
-  onClose,
+  open,
+  onOpenChange,
   onCreated,
 }: {
-  onClose: () => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onCreated: (c: CustomerResponse) => void;
 }) {
   const [name, setName] = useState("");
@@ -346,12 +279,16 @@ function AddCustomerModal({
         email: email.trim() || null,
         notes: notes.trim() || null,
       }),
-    onSuccess: (c) => { onCreated(c); onClose(); },
+    onSuccess: (c) => { onCreated(c); onOpenChange(false); reset(); },
     onError: (e: unknown) => {
       const data = (e as { data?: ApiError }).data;
       setErr(formatApiError(data ?? {}, "Could not add customer."));
     },
   });
+
+  function reset() {
+    setName(""); setPhone(""); setEmail(""); setNotes(""); setErr(null);
+  }
 
   function handleSubmit() {
     if (!name.trim()) { setErr("Name is required."); return; }
@@ -362,56 +299,39 @@ function AddCustomerModal({
   }
 
   return (
-    <>
-      <div className="fixed inset-0 bg-black/30 z-50" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
-        <div className="bg-canvas rounded-xl shadow-lg w-full max-w-md pointer-events-auto">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-hairline">
-            <h2 className="font-display text-lg font-semibold text-ink">Add customer</h2>
-            <button onClick={onClose} className="text-muted hover:text-ink p-1 rounded-md hover:bg-surface-soft transition-colors">
-              <CloseIcon />
-            </button>
-          </div>
-          <div className="px-6 py-5 flex flex-col gap-4">
-            {err && <p className="text-sm text-error bg-red-50 border border-red-200 rounded-md px-3 py-2">{err}</p>}
-            <Field label="Name" required>
-              <input
-                type="text" value={name} onChange={(e) => setName(e.target.value)}
-                placeholder="John Smith" autoFocus className={inputCls(false)}
-                onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-              />
-            </Field>
-            <Field label="Phone" required>
-              <input
-                type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
-                placeholder="(555) 000-0000" maxLength={14} className={inputCls(false)}
-              />
-            </Field>
-            <Field label="Email">
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                placeholder="john@example.com" className={inputCls(false)} />
-            </Field>
-            <Field label="Notes">
-              <textarea value={notes} onChange={(e) => setNotes(e.target.value)}
-                placeholder="Preferences, allergies…" rows={3}
-                className={inputCls(false) + " resize-none"} />
-            </Field>
-          </div>
-          <div className="flex gap-3 px-6 pb-5">
-            <button
-              onClick={handleSubmit} disabled={createMut.isPending}
-              className="flex-1 h-9 bg-primary hover:bg-primary-hover text-white text-sm font-medium rounded-md disabled:opacity-60 transition-colors"
-            >
-              {createMut.isPending ? "Adding…" : "Add customer"}
-            </button>
-            <button onClick={onClose}
-              className="h-9 px-4 border border-hairline text-sm text-ink rounded-md hover:bg-surface-soft transition-colors">
-              Cancel
-            </button>
-          </div>
+    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reset(); }}>
+      <DialogContent className="max-w-md p-0">
+        <DialogHeader className="px-6 py-4 border-b border-hairline">
+          <DialogTitle className="font-display text-lg font-semibold text-ink">Add customer</DialogTitle>
+        </DialogHeader>
+        <div className="px-6 py-5 flex flex-col gap-4">
+          {err && <p className="text-sm text-error bg-red-50 border border-red-200 rounded-md px-3 py-2">{err}</p>}
+          <FormField label="Name" required>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="John Smith" autoFocus
+              onKeyDown={(e) => e.key === "Enter" && handleSubmit()} />
+          </FormField>
+          <FormField label="Phone" required>
+            <Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(555) 000-0000" maxLength={14} />
+          </FormField>
+          <FormField label="Email">
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="john@example.com" />
+          </FormField>
+          <FormField label="Notes">
+            <textarea
+              value={notes} onChange={(e) => setNotes(e.target.value)}
+              placeholder="Preferences, allergies…" rows={3}
+              className="w-full px-3 py-2 border border-input rounded-md text-sm bg-transparent text-ink placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
+            />
+          </FormField>
         </div>
-      </div>
-    </>
+        <div className="flex gap-3 px-6 pb-5">
+          <Button onClick={handleSubmit} disabled={createMut.isPending} className="flex-1">
+            {createMut.isPending ? "Adding…" : "Add customer"}
+          </Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -461,10 +381,7 @@ export default function Customers() {
   function handleUpdated(updated: CustomerResponse) {
     qc.setQueryData<{ customers: CustomerResponse[]; total: number }>(["customers"], (old) => {
       if (!old) return old;
-      return {
-        ...old,
-        customers: old.customers.map((c) => (c.id === updated.id ? updated : c)),
-      };
+      return { ...old, customers: old.customers.map((c) => (c.id === updated.id ? updated : c)) };
     });
     setSelectedCust(updated);
   }
@@ -489,45 +406,39 @@ export default function Customers() {
       {/* Toolbar */}
       <div className="flex items-center gap-3 mb-5">
         <div className="relative flex-1 max-w-sm">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none">
-            <SearchIcon />
-          </span>
-          <input
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none h-3.5 w-3.5" />
+          <Input
             type="search" value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by name, phone or email…"
-            className="w-full h-9 pl-9 pr-3 border border-hairline rounded-md text-sm bg-canvas focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
+            className="pl-9"
           />
         </div>
-        <select
-          value={sort} onChange={(e) => setSort(e.target.value as SortKey)}
-          className="h-9 px-3 border border-hairline rounded-md text-sm bg-canvas text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-        >
-          <option value="newest">Newest</option>
-          <option value="oldest">Oldest</option>
-          <option value="name-asc">Name A–Z</option>
-          <option value="name-desc">Name Z–A</option>
-        </select>
+        <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
+          <SelectTrigger className="w-36">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="newest">Newest</SelectItem>
+            <SelectItem value="oldest">Oldest</SelectItem>
+            <SelectItem value="name-asc">Name A–Z</SelectItem>
+            <SelectItem value="name-desc">Name Z–A</SelectItem>
+          </SelectContent>
+        </Select>
         {canManage && (
-          <button
-            onClick={() => setShowAdd(true)}
-            className="h-9 px-4 bg-primary hover:bg-primary-hover text-white text-sm font-medium rounded-md transition-colors flex items-center gap-1.5"
-          >
-            <PlusIcon /> Add customer
-          </button>
+          <Button onClick={() => setShowAdd(true)} className="gap-1.5">
+            <Plus className="h-3.5 w-3.5" /> Add customer
+          </Button>
         )}
       </div>
 
       {/* States */}
-      {isLoading && (
-        <p className="text-sm text-muted py-8 text-center">Loading customers…</p>
-      )}
+      {isLoading && <p className="text-sm text-muted py-8 text-center">Loading customers…</p>}
       {isError && (
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-md px-4 py-3 text-sm">
           Could not load customers.
         </div>
       )}
 
-      {/* Empty state */}
       {!isLoading && !isError && customers.length === 0 && (
         <div className="bg-canvas rounded-xl border border-hairline p-10 text-center max-w-lg">
           <p className="font-semibold text-ink mb-1">No customers yet</p>
@@ -535,7 +446,6 @@ export default function Customers() {
         </div>
       )}
 
-      {/* No results */}
       {!isLoading && !isError && customers.length > 0 && visible.length === 0 && (
         <div className="bg-canvas rounded-xl border border-hairline p-10 text-center max-w-lg">
           <p className="font-semibold text-ink mb-1">No results</p>
@@ -546,17 +456,17 @@ export default function Customers() {
       {/* Table */}
       {visible.length > 0 && (
         <div className="bg-canvas rounded-xl border border-hairline overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-hairline">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-b border-hairline hover:bg-transparent">
                 {["Customer", "Phone", "Email", "Notes", "Since"].map((h) => (
-                  <th key={h} className="text-left text-xs font-semibold text-muted uppercase tracking-wide px-4 py-3 first:pl-5">
+                  <TableHead key={h} className="text-xs font-semibold text-muted uppercase tracking-wide px-4 py-3 first:pl-5 h-auto">
                     {h}
-                  </th>
+                  </TableHead>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {visible.map((cust) => {
                 const initials = getInitials(cust.name, cust.phone);
                 const color = avatarColor(cust.name || cust.phone || String(cust.id));
@@ -564,83 +474,63 @@ export default function Customers() {
                   ? (cust.notes || "").slice(0, 50) + "…"
                   : cust.notes || "";
                 return (
-                  <tr
+                  <TableRow
                     key={cust.id}
                     onClick={() => setSelectedCust(cust)}
                     className="border-b border-hairline last:border-0 hover:bg-surface-soft cursor-pointer transition-colors"
                   >
-                    <td className="px-4 py-3 pl-5">
+                    <TableCell className="px-4 py-3 pl-5">
                       <div className="flex items-center gap-2.5">
-                        <div
-                          className="w-7 h-7 rounded-full grid place-items-center text-xs font-semibold text-white flex-shrink-0"
-                          style={{ background: color }}
-                        >
-                          {initials}
-                        </div>
+                        <Avatar className="h-7 w-7 flex-shrink-0">
+                          <AvatarFallback style={{ background: color }} className="text-white text-xs font-semibold">
+                            {initials}
+                          </AvatarFallback>
+                        </Avatar>
                         <span className="font-medium text-ink">{cust.name || "—"}</span>
                       </div>
-                    </td>
-                    <td className="px-4 py-3 text-muted">{cust.phone || <span className="text-hairline">—</span>}</td>
-                    <td className="px-4 py-3 text-muted">{cust.email || <span className="text-hairline">—</span>}</td>
-                    <td className="px-4 py-3 text-muted max-w-xs truncate">{notesTrunc || <span className="text-hairline">—</span>}</td>
-                    <td className="px-4 py-3 text-muted">{fmtDate(cust.created_at)}</td>
-                  </tr>
+                    </TableCell>
+                    <TableCell className="px-4 py-3 text-muted">{cust.phone || <span className="text-hairline">—</span>}</TableCell>
+                    <TableCell className="px-4 py-3 text-muted">{cust.email || <span className="text-hairline">—</span>}</TableCell>
+                    <TableCell className="px-4 py-3 text-muted max-w-xs truncate">{notesTrunc || <span className="text-hairline">—</span>}</TableCell>
+                    <TableCell className="px-4 py-3 text-muted">{fmtDate(cust.created_at)}</TableCell>
+                  </TableRow>
                 );
               })}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
 
       {/* Drawer */}
-      {selectedCust && (
-        <CustomerDrawer
-          cust={selectedCust}
-          canManage={canManage}
-          onClose={() => setSelectedCust(null)}
-          onUpdated={handleUpdated}
-          onDeleted={handleDeleted}
-        />
-      )}
+      <Sheet open={selectedCust !== null} onOpenChange={(open) => !open && setSelectedCust(null)}>
+        <SheetContent side="right" hideClose className="w-96 p-0 flex flex-col">
+          {selectedCust && (
+            <CustomerDrawerContent
+              key={selectedCust.id}
+              cust={selectedCust}
+              canManage={!!canManage}
+              onUpdated={handleUpdated}
+              onDeleted={handleDeleted}
+            />
+          )}
+        </SheetContent>
+      </Sheet>
 
       {/* Add modal */}
-      {showAdd && (
-        <AddCustomerModal
-          onClose={() => setShowAdd(false)}
-          onCreated={handleCreated}
-        />
-      )}
+      <AddCustomerModal open={showAdd} onOpenChange={setShowAdd} onCreated={handleCreated} />
     </div>
   );
 }
 
-// ── Tiny shared UI helpers ────────────────────────────────────────────────────
+// ── Shared form helpers ───────────────────────────────────────────────────────
 
-function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+function FormField({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
-    <div>
-      <label className="block text-sm font-medium text-ink mb-1.5">
+    <div className="flex flex-col gap-1.5">
+      <Label className="text-sm font-medium text-ink">
         {label}{required && <span className="text-error ml-0.5">*</span>}
-      </label>
+      </Label>
       {children}
     </div>
   );
-}
-
-function inputCls(disabled: boolean) {
-  return [
-    "w-full px-3 py-2 border rounded-md text-sm bg-canvas text-ink placeholder:text-muted",
-    "focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors",
-    disabled ? "border-hairline opacity-60 cursor-not-allowed" : "border-hairline",
-  ].join(" ");
-}
-
-function SearchIcon() {
-  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>;
-}
-function PlusIcon() {
-  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>;
-}
-function CloseIcon() {
-  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>;
 }

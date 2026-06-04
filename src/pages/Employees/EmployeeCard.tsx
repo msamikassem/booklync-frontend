@@ -1,19 +1,3 @@
-/**
- * Employee card — the main UI unit.
- *
- * Panels (only one visible at a time):
- *   view      — default: avatar, name, role, branch chips, status/access pills + action buttons
- *   edit      — EmployeeEditForm
- *   schedule  — EmployeeSchedule (working hours, breaks, days off)
- *   services  — EmployeeCapabilities
- *
- * Action buttons and UI elements are gated by four permission scopes:
- *   manage_employees      — delete button, branch checkboxes in edit form
- *   edit_employee_details — edit button, services tab, profile-pic click
- *   toggle_employee_status — active/inactive pill (button vs. read-only span)
- *   invite_users          — invite button label + access modal
- */
-
 import { useState, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { employeesApi } from "./api";
@@ -23,19 +7,20 @@ import { EmployeeCapabilities } from "./EmployeeCapabilities";
 import { AccessModal } from "./AccessModal";
 import type { EmployeeResponse, AccessStatus } from "./types";
 import type { AgentResponse } from "../../api/types";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "../../lib/utils";
+import { Trash2, Pencil, Clock, Scissors, Mail } from "lucide-react";
 
 type Panel = "view" | "edit" | "schedule" | "services";
 
-// ── Status pill colours ────────────────────────────────────────────────────────
-
 const ACCESS_PILL: Record<AccessStatus, { label: string; cls: string }> = {
-  active:         { label: "Dashboard: Active",   cls: "bg-green-100 text-green-800" },
-  invite_pending: { label: "Invite pending",       cls: "bg-blue-100 text-blue-700" },
-  invite_expired: { label: "Invite expired",       cls: "bg-amber-100 text-amber-700" },
-  none:           { label: "No dashboard access",  cls: "bg-gray-100 text-gray-500" },
+  active:         { label: "Dashboard: Active",   cls: "bg-green-100 text-green-800 border-transparent" },
+  invite_pending: { label: "Invite pending",       cls: "bg-blue-100 text-blue-700 border-transparent" },
+  invite_expired: { label: "Invite expired",       cls: "bg-amber-100 text-amber-700 border-transparent" },
+  none:           { label: "No dashboard access",  cls: "bg-gray-100 text-gray-500 border-transparent" },
 };
-
-// ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
   emp: EmployeeResponse;
@@ -70,14 +55,8 @@ export function EmployeeCard({
   const isBookable = branch?.can_receive_bookings ?? true;
   const isActive   = branch?.active ?? true;
   const da         = emp.dashboard_access;
-
-  // Other branches this employee belongs to (shown as chips)
   const otherBranches = emp.branches.filter(b => b.agent_id !== agentId);
-
-  // Initials + avatar
   const initials = emp.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
-
-  // ── Toggle active/inactive ───────────────────────────────────────────────
 
   const toggleActive = useMutation({
     mutationFn: () => isActive
@@ -87,15 +66,12 @@ export function EmployeeCard({
     onError: () => onToast("Could not update status."),
   });
 
-  // ── Delete ───────────────────────────────────────────────────────────────
-
   const deleteMut = useMutation({
     mutationFn: () => employeesApi.delete(emp.id, agentId),
     onSuccess: () => { onReload(); onToast("Employee deleted."); },
     onError: (err: unknown) => {
       const data = (err as { data?: { code?: string } }).data;
       if (data?.code === "EMPLOYEE_MULTI_BRANCH") {
-        // Offer unassign instead of delete
         if (window.confirm(
           `${emp.name} is assigned to multiple branches. Remove them from this branch only (keeps other branches and history)?`
         )) unassignMut.mutate();
@@ -111,16 +87,12 @@ export function EmployeeCard({
     onError: () => onToast("Could not unassign employee."),
   });
 
-  // ── Profile picture upload ────────────────────────────────────────────────
-
   async function handlePictureChange(file: File) {
     try {
       await employeesApi.uploadPicture(emp.id, agentId, file);
       onReload();
     } catch { onToast("Could not upload picture."); }
   }
-
-  // ── Invite button label ───────────────────────────────────────────────────
 
   function inviteLabel(): string {
     if (da.status === "active")         return "Dashboard";
@@ -142,7 +114,10 @@ export function EmployeeCard({
             <div className="relative flex-shrink-0">
               <div
                 onClick={() => canEditDetails && fileRef.current?.click()}
-                className={`w-12 h-12 rounded-full overflow-hidden bg-primary/10 grid place-items-center text-sm font-semibold text-primary ${canEditDetails ? "cursor-pointer" : ""}`}
+                className={cn(
+                  "w-12 h-12 rounded-full overflow-hidden bg-primary/10 grid place-items-center text-sm font-semibold text-primary",
+                  canEditDetails && "cursor-pointer"
+                )}
               >
                 {emp.profile_picture_url
                   ? <img src={emp.profile_picture_url} alt="" className="w-full h-full object-cover" />
@@ -152,13 +127,12 @@ export function EmployeeCard({
                 onChange={e => { const f = e.target.files?.[0]; if (f) handlePictureChange(f); }} />
             </div>
 
-            {/* Name / role / branches / contact */}
+            {/* Name / role / contact */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap mb-0.5">
                 <span className="font-semibold text-ink">{emp.name}</span>
                 {emp.role && <span className="text-xs text-muted">{emp.role}</span>}
               </div>
-              {/* Branch chips */}
               {otherBranches.length > 0 && (
                 <div className="flex flex-wrap gap-1 mb-1">
                   {otherBranches.map(b => (
@@ -175,12 +149,11 @@ export function EmployeeCard({
               </div>
             </div>
 
-            {/* Delete icon */}
             {canManageEmployees && (
-              <button onClick={() => setDeleteConfirm(true)} disabled={deleteInProgress}
-                className="text-muted hover:text-error p-1 rounded transition-colors flex-shrink-0">
-                <TrashIcon />
-              </button>
+              <Button variant="ghost" size="icon" onClick={() => setDeleteConfirm(true)} disabled={deleteInProgress}
+                className="text-muted hover:text-error h-8 w-8 flex-shrink-0">
+                <Trash2 className="h-4 w-4" />
+              </Button>
             )}
           </div>
 
@@ -188,49 +161,50 @@ export function EmployeeCard({
           <div className="flex items-center gap-2 mt-3 flex-wrap">
             {canToggleStatus ? (
               <button onClick={() => toggleActive.mutate()} disabled={toggleActive.isPending}
-                className={`text-xs font-medium px-2.5 py-1 rounded-pill transition-colors ${isActive ? "bg-green-100 text-green-800 hover:bg-green-200" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>
+                className={cn(
+                  "text-xs font-medium px-2.5 py-1 rounded-full transition-colors",
+                  isActive ? "bg-green-100 text-green-800 hover:bg-green-200" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                )}>
                 {isActive ? "Active" : "Inactive"}
               </button>
             ) : (
-              <span className={`text-xs font-medium px-2.5 py-1 rounded-pill ${isActive ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-500"}`}>
+              <Badge className={cn("rounded-full text-xs font-medium", isActive ? "bg-green-100 text-green-800 border-transparent" : "bg-gray-100 text-gray-500 border-transparent")}>
                 {isActive ? "Active" : "Inactive"}
-              </span>
+              </Badge>
             )}
 
-            <span className={`text-xs font-medium px-2.5 py-1 rounded-pill ${accessPill.cls}`}>
+            <Badge className={cn("rounded-full text-xs font-medium", accessPill.cls)}>
               {accessPill.label}
-            </span>
+            </Badge>
 
             {!isBookable && (
-              <span className="text-xs font-medium px-2.5 py-1 rounded-pill bg-orange-100 text-orange-700">Non-bookable</span>
+              <Badge className="rounded-full text-xs font-medium bg-orange-100 text-orange-700 border-transparent">
+                Non-bookable
+              </Badge>
             )}
           </div>
 
           {/* Action buttons */}
           <div className="flex flex-wrap gap-2 mt-3">
             {canEditDetails && (
-              <button onClick={() => setPanel("edit")}
-                className="flex items-center gap-1.5 text-xs font-medium px-3 h-7 border border-hairline rounded hover:bg-surface-soft transition-colors">
-                <EditIcon /> Edit
-              </button>
+              <Button variant="outline" size="sm" onClick={() => setPanel("edit")} className="h-7 gap-1.5 text-xs">
+                <Pencil className="h-3 w-3" /> Edit
+              </Button>
             )}
             {isBookable && (
-              <button onClick={() => setPanel("schedule")}
-                className="flex items-center gap-1.5 text-xs font-medium px-3 h-7 border border-hairline rounded hover:bg-surface-soft transition-colors">
-                <ClockIcon /> Schedule
-              </button>
+              <Button variant="outline" size="sm" onClick={() => setPanel("schedule")} className="h-7 gap-1.5 text-xs">
+                <Clock className="h-3 w-3" /> Schedule
+              </Button>
             )}
             {isBookable && canEditDetails && (
-              <button onClick={() => setPanel("services")}
-                className="flex items-center gap-1.5 text-xs font-medium px-3 h-7 border border-hairline rounded hover:bg-surface-soft transition-colors">
-                <ServicesIcon /> Services
-              </button>
+              <Button variant="outline" size="sm" onClick={() => setPanel("services")} className="h-7 gap-1.5 text-xs">
+                <Scissors className="h-3 w-3" /> Services
+              </Button>
             )}
             {canInviteUsers && (
-              <button onClick={() => setShowAccess(true)}
-                className="flex items-center gap-1.5 text-xs font-medium px-3 h-7 border border-hairline rounded hover:bg-surface-soft transition-colors">
-                <MailIcon /> {inviteLabel()}
-              </button>
+              <Button variant="outline" size="sm" onClick={() => setShowAccess(true)} className="h-7 gap-1.5 text-xs">
+                <Mail className="h-3 w-3" /> {inviteLabel()}
+              </Button>
             )}
           </div>
         </div>
@@ -273,35 +247,30 @@ export function EmployeeCard({
         </div>
       )}
 
-      {/* ── Delete confirm ── */}
-      {deleteConfirm && (
-        <>
-          <div className="fixed inset-0 bg-black/25 z-50" onClick={() => setDeleteConfirm(false)} />
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
-            <div className="bg-canvas rounded-xl shadow-lg w-full max-w-sm pointer-events-auto p-6">
-              <h3 className="font-display font-semibold text-ink mb-1">Delete employee?</h3>
-              {da.status === "active" && (
-                <p className="text-xs text-error bg-red-50 border border-red-200 rounded px-2 py-1 mb-2">
-                  This will also remove their dashboard login.
-                </p>
-              )}
-              <p className="text-sm text-muted mb-5">
-                Permanently delete <strong>{emp.name}</strong>? Their appointment history is kept.
-              </p>
-              <div className="flex gap-3">
-                <button onClick={() => { setDeleteConfirm(false); deleteMut.mutate(); }}
-                  className="flex-1 h-9 bg-error hover:bg-red-700 text-white text-sm font-medium rounded-md disabled:opacity-60">
-                  Delete
-                </button>
-                <button onClick={() => setDeleteConfirm(false)}
-                  className="h-9 px-4 border border-hairline text-sm text-ink rounded-md hover:bg-surface-soft">
-                  Cancel
-                </button>
-              </div>
-            </div>
+      {/* ── Delete confirm dialog ── */}
+      <Dialog open={deleteConfirm} onOpenChange={setDeleteConfirm}>
+        <DialogContent className="max-w-sm p-6">
+          <DialogHeader>
+            <DialogTitle className="font-display font-semibold text-ink">Delete employee?</DialogTitle>
+          </DialogHeader>
+          {da.status === "active" && (
+            <p className="text-xs text-error bg-red-50 border border-red-200 rounded px-2 py-1">
+              This will also remove their dashboard login.
+            </p>
+          )}
+          <p className="text-sm text-muted">
+            Permanently delete <strong>{emp.name}</strong>? Their appointment history is kept.
+          </p>
+          <div className="flex gap-3 mt-2">
+            <Button
+              variant="destructive" className="flex-1"
+              onClick={() => { setDeleteConfirm(false); deleteMut.mutate(); }}>
+              Delete
+            </Button>
+            <Button variant="outline" onClick={() => setDeleteConfirm(false)}>Cancel</Button>
           </div>
-        </>
-      )}
+        </DialogContent>
+      </Dialog>
 
       {/* ── Access modal ── */}
       {showAccess && (
@@ -315,11 +284,3 @@ export function EmployeeCard({
     </div>
   );
 }
-
-// ── Icons ─────────────────────────────────────────────────────────────────────
-const s = { width: 12, height: 12, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
-function TrashIcon()    { return <svg {...s}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>; }
-function EditIcon()     { return <svg {...s}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>; }
-function ClockIcon()    { return <svg {...s}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>; }
-function ServicesIcon() { return <svg {...s}><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>; }
-function MailIcon()     { return <svg {...s}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>; }

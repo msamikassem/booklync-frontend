@@ -1,25 +1,31 @@
-/**
- * Appointment drawer — Details + History tabs.
- *
- * Details tab: read-only fields + editable status dropdown.
- *   - Status change shows Save/Reset row (dirty-only, same pattern as Customers drawer).
- *   - Staff can only change to completed/no_show/cancelled; pending/confirmed are disabled.
- * History tab: lazy-loads the customer's full appointment history, newest first,
- *   excluding the current appointment.
- */
-
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { appointmentsApi } from "./api";
 import { customers as customersApi } from "../../api";
 import { formatApiError } from "../../lib/errors";
+import { cn, getInitials, avatarColor } from "../../lib/utils";
 import { fmtDate, fmtTime, apptDuration, fmtPhone } from "./utils";
-import { STATUS_LABELS, STATUS_COLORS, SOURCE_LABELS } from "./types";
+import { STATUS_LABELS, SOURCE_LABELS } from "./types";
 import type { AppointmentDetailResponse, ApiError } from "./types";
-import { getInitials, avatarColor } from "../../lib/utils";
+import { Sheet, SheetContent, SheetClose } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { X } from "lucide-react";
 
 const STATUS_OPTIONS = ["pending", "confirmed", "cancelled", "completed", "no_show"];
 const STAFF_ALLOWED = new Set(["completed", "no_show", "cancelled"]);
+
+const STATUS_BADGE: Record<string, string> = {
+  pending:   "bg-yellow-100 text-yellow-800 border-transparent hover:bg-yellow-100",
+  confirmed: "bg-blue-100 text-blue-800 border-transparent hover:bg-blue-100",
+  cancelled: "bg-gray-100 text-gray-500 border-transparent hover:bg-gray-100",
+  completed: "bg-green-100 text-green-800 border-transparent hover:bg-green-100",
+  no_show:   "bg-red-100 text-red-700 border-transparent hover:bg-red-100",
+};
 
 interface Props {
   appt: AppointmentDetailResponse;
@@ -28,9 +34,12 @@ interface Props {
   canUpdateStatus: boolean;
   onClose: () => void;
   onUpdated: (updated: AppointmentDetailResponse) => void;
+  /** Status-change transport. Defaults to the full-dashboard endpoint; the staff
+   *  own-calendar passes the `/staff/*` variant (the only one staff tokens allow). */
+  updateStatus?: (id: number, status: string) => Promise<AppointmentDetailResponse>;
 }
 
-export function AppointmentDrawer({ appt, tz, isStaff, canUpdateStatus, onClose, onUpdated }: Props) {
+export function AppointmentDrawer({ appt, tz, isStaff, canUpdateStatus, onClose, onUpdated, updateStatus }: Props) {
   const qc = useQueryClient();
   const [tab, setTab] = useState<"details" | "history">("details");
   const [status, setStatus] = useState(appt.status ?? "pending");
@@ -39,7 +48,6 @@ export function AppointmentDrawer({ appt, tz, isStaff, canUpdateStatus, onClose,
 
   const dirty = status !== appt.status;
 
-  // Lazy-load customer history when History tab opens
   const { data: history, isLoading: histLoading, isError: histError } = useQuery({
     queryKey: ["customer-appointments", appt.customer_id],
     queryFn: () => customersApi.getAppointments(appt.customer_id!),
@@ -54,7 +62,7 @@ export function AppointmentDrawer({ appt, tz, isStaff, canUpdateStatus, onClose,
   async function handleSave() {
     setSaving(true); setErr(null);
     try {
-      const updated = await appointmentsApi.updateStatus(appt.id, status);
+      const updated = await (updateStatus ?? appointmentsApi.updateStatus)(appt.id, status);
       qc.invalidateQueries({ queryKey: ["appointments"] });
       if (appt.customer_id) qc.invalidateQueries({ queryKey: ["customer-appointments", appt.customer_id] });
       onUpdated(updated);
@@ -74,34 +82,39 @@ export function AppointmentDrawer({ appt, tz, isStaff, canUpdateStatus, onClose,
   const svcLabel = [appt.service_name, appt.variation_name].filter(Boolean).join(" — ");
 
   return (
-    <>
-      <div className="fixed inset-0 bg-black/20 z-40" onClick={onClose} />
-      <aside className="fixed right-0 top-0 h-full w-96 max-w-full bg-canvas shadow-lg z-50 flex flex-col">
+    <Sheet open={true} onOpenChange={(open) => !open && onClose()}>
+      <SheetContent side="right" hideClose className="w-96 p-0 flex flex-col">
         {/* Header */}
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-hairline">
-          <div className="w-10 h-10 rounded-full grid place-items-center text-sm font-semibold text-white flex-shrink-0"
-            style={{ background: color }}>{initials}</div>
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-hairline flex-shrink-0">
+          <Avatar className="h-10 w-10 flex-shrink-0">
+            <AvatarFallback style={{ background: color }} className="text-white text-sm font-semibold">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
           <div className="flex-1 min-w-0">
             <div className="font-semibold text-ink truncate">{custName}</div>
             <div className="text-xs text-muted">{fmtDate(local, tz)} · {fmtTime(local, tz)}</div>
             <div className="mt-0.5">
-              <span className={`text-[10px] font-medium px-2 py-0.5 rounded-pill ${STATUS_COLORS[appt.status ?? "pending"] ?? "bg-gray-100 text-gray-600"}`}>
+              <Badge className={cn("rounded-full text-[10px] font-medium", STATUS_BADGE[appt.status ?? "pending"] ?? "bg-gray-100 text-gray-600 border-transparent")}>
                 {STATUS_LABELS[appt.status ?? "pending"] ?? appt.status}
-              </span>
+              </Badge>
             </div>
           </div>
-          <button onClick={onClose} className="text-muted hover:text-ink p-1 rounded hover:bg-surface-soft">
-            <XIcon />
-          </button>
+          <SheetClose asChild>
+            <Button variant="ghost" size="icon" className="text-muted hover:text-ink h-8 w-8">
+              <X className="h-4 w-4" />
+            </Button>
+          </SheetClose>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-hairline px-5">
-          {(["details", "history"] as const).map(t => (
+        <div className="flex border-b border-hairline px-5 flex-shrink-0">
+          {(isStaff ? (["details"] as const) : (["details", "history"] as const)).map(t => (
             <button key={t} onClick={() => setTab(t)}
-              className={`pb-3 pt-3 mr-5 text-sm font-medium border-b-2 transition-colors capitalize ${tab === t ? "border-primary text-primary" : "border-transparent text-muted hover:text-ink"}`}>
-              {t === "history" ? (isStaff ? undefined : "History") : "Details"}
-              {t === "history" && isStaff ? null : null}
+              className={cn(
+                "pb-3 pt-3 mr-5 text-sm font-medium border-b-2 transition-colors capitalize",
+                tab === t ? "border-primary text-primary" : "border-transparent text-muted hover:text-ink",
+              )}>
               {t.charAt(0).toUpperCase() + t.slice(1)}
             </button>
           ))}
@@ -112,7 +125,6 @@ export function AppointmentDrawer({ appt, tz, isStaff, canUpdateStatus, onClose,
           {/* Details tab */}
           {tab === "details" && (
             <div className="flex flex-col gap-4">
-              {/* Read-only info rows */}
               <div className="flex flex-col gap-2 text-sm">
                 <Row label="Customer" value={custName} />
                 {phone && <Row label="Phone" value={fmtPhone(phone)} />}
@@ -128,18 +140,21 @@ export function AppointmentDrawer({ appt, tz, isStaff, canUpdateStatus, onClose,
                 )}
               </div>
 
-              {/* Status change */}
               {canUpdateStatus && (
                 <div>
                   <div className="text-xs font-medium text-muted uppercase tracking-wide mb-1.5">Status</div>
-                  <select value={status} onChange={e => setStatus(e.target.value)}
-                    className="w-full h-9 px-3 border border-hairline rounded-md text-sm bg-canvas text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary">
-                    {STATUS_OPTIONS.map(s => (
-                      <option key={s} value={s} disabled={isStaff && !STAFF_ALLOWED.has(s)}>
-                        {STATUS_LABELS[s]}
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={status} onValueChange={setStatus}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STATUS_OPTIONS.map(s => (
+                        <SelectItem key={s} value={s} disabled={isStaff && !STAFF_ALLOWED.has(s)}>
+                          {STATUS_LABELS[s]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
 
@@ -147,14 +162,12 @@ export function AppointmentDrawer({ appt, tz, isStaff, canUpdateStatus, onClose,
 
               {dirty && canUpdateStatus && (
                 <div className="flex gap-2">
-                  <button onClick={handleSave} disabled={saving}
-                    className="flex-1 h-9 bg-primary hover:bg-primary-hover text-white text-sm font-medium rounded-md disabled:opacity-60 transition-colors">
+                  <Button onClick={handleSave} disabled={saving} className="flex-1">
                     {saving ? "Saving…" : "Save changes"}
-                  </button>
-                  <button onClick={() => { setStatus(appt.status ?? "pending"); setErr(null); }}
-                    className="h-9 px-4 border border-hairline text-sm text-ink rounded-md hover:bg-surface-soft">
+                  </Button>
+                  <Button variant="outline" onClick={() => { setStatus(appt.status ?? "pending"); setErr(null); }}>
                     Reset
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
@@ -173,6 +186,7 @@ export function AppointmentDrawer({ appt, tz, isStaff, canUpdateStatus, onClose,
               )}
               {historyOthers.map(a => {
                 const local2 = a.start_time_local ?? a.start_time;
+                const st = a.status ?? "pending";
                 return (
                   <div key={a.id} className="flex items-start justify-between gap-3 py-3 border-b border-hairline last:border-0">
                     <div className="min-w-0">
@@ -184,17 +198,17 @@ export function AppointmentDrawer({ appt, tz, isStaff, canUpdateStatus, onClose,
                         <span className="text-xs text-muted">{fmtTime(local2, tz)}</span>
                       </div>
                     </div>
-                    <span className={`text-[10px] font-medium px-2 py-0.5 rounded-pill flex-shrink-0 ${STATUS_COLORS[a.status ?? "pending"] ?? "bg-gray-100 text-gray-600"}`}>
-                      {STATUS_LABELS[a.status ?? "pending"]}
-                    </span>
+                    <Badge className={cn("rounded-full text-[10px] font-medium flex-shrink-0", STATUS_BADGE[st] ?? "bg-gray-100 text-gray-600 border-transparent")}>
+                      {STATUS_LABELS[st]}
+                    </Badge>
                   </div>
                 );
               })}
             </div>
           )}
         </div>
-      </aside>
-    </>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -205,8 +219,4 @@ function Row({ label, value }: { label: string; value: string }) {
       <div className="text-ink">{value}</div>
     </div>
   );
-}
-
-function XIcon() {
-  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
 }
