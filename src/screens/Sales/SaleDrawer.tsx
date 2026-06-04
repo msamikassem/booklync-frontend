@@ -12,7 +12,7 @@ import type { Sale, SaleLineItem, SaleDiscount, ApiError } from "./types";
 import { PaymentModal } from "./PaymentModal";
 import { DiscountModal } from "./DiscountModal";
 import { RedeemModal } from "./RedeemModal";
-import { Sheet, SheetContent, SheetClose } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetClose, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { X } from "lucide-react";
@@ -77,6 +77,9 @@ export function SaleDrawer({ saleId, initialSale, agentId, custName, canCheckout
     <>
       <Sheet open onOpenChange={(o) => !o && onClose()}>
         <SheetContent side="right" hideClose className="w-[26rem] p-0 flex flex-col">
+          {/* Accessible title for the dialog (visually hidden — the styled
+              header below is the visible equivalent). Radix requires a title. */}
+          <SheetTitle className="sr-only">Receipt #{sale.id}</SheetTitle>
           {/* Header */}
           <div className="flex items-start gap-3 px-5 py-4 border-b border-hairline flex-shrink-0">
             <div className="flex-1 min-w-0">
