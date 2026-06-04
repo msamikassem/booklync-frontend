@@ -1,10 +1,13 @@
+"use client";
+
 /**
  * Dashboard shell — sidebar + topbar + content area.
  * Mirrors the dash-layout / dash-sidebar / dash-topbar structure from dashboard.html.
  */
 
 import { useState, useEffect } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useAuth } from "../../contexts/AuthContext";
 import { useAgent } from "../../contexts/AgentContext";
 
@@ -60,23 +63,23 @@ function NavItem({
   label: string;
   show?: boolean;
 }) {
+  const pathname = usePathname();
   if (!show) return null;
+  const isActive = pathname === to;
   return (
     <li>
-      <NavLink
-        to={to}
-        className={({ isActive }) =>
-          [
-            "flex items-center gap-2.5 h-[38px] px-2.5 rounded-md text-sm font-medium transition-colors",
-            isActive
-              ? "bg-primary/25 text-blue-300"
-              : "text-white/55 hover:bg-white/[0.06] hover:text-white/90",
-          ].join(" ")
-        }
+      <Link
+        href={to}
+        className={[
+          "flex items-center gap-2.5 h-[38px] px-2.5 rounded-md text-sm font-medium transition-colors",
+          isActive
+            ? "bg-primary/25 text-blue-300"
+            : "text-white/55 hover:bg-white/[0.06] hover:text-white/90",
+        ].join(" ")}
       >
         <span className="flex-shrink-0 opacity-70">{icon}</span>
         {label}
-      </NavLink>
+      </Link>
     </li>
   );
 }
@@ -140,11 +143,11 @@ function BranchPicker() {
 
 // ── Shell ─────────────────────────────────────────────────────────────────────
 
-export default function DashboardShell() {
+export default function DashboardShell({ children }: { children: React.ReactNode }) {
   const { me, logout } = useAuth();
   const { activeAgent } = useAgent();
   const can = useCan();
-  const location = useLocation();
+  const pathname = usePathname();
 
   // Display name: owner shows business name, everyone else shows employee name or email
   const displayName = me?.is_owner
@@ -171,7 +174,7 @@ export default function DashboardShell() {
     "/dashboard/team": "Team",
     "/dashboard/booking-page": "Booking Page",
   };
-  const pageTitle = routeLabel[location.pathname] ?? "Dashboard";
+  const pageTitle = routeLabel[pathname] ?? "Dashboard";
 
   return (
     <div className="grid min-h-screen" style={{ gridTemplateColumns: "240px minmax(0,1fr)" }}>
@@ -182,13 +185,13 @@ export default function DashboardShell() {
       >
         <div className="flex flex-col h-full px-4 py-6">
           {/* Brand */}
-          <a href="/dashboard" className="inline-flex items-center gap-2.5 font-display font-semibold text-lg text-white tracking-tight mb-8 px-2">
+          <Link href="/dashboard" className="inline-flex items-center gap-2.5 font-display font-semibold text-lg text-white tracking-tight mb-8 px-2">
             <svg width="26" height="26" viewBox="0 0 100 100">
               <rect width="100" height="100" rx="22" fill="#2563EB" />
               <rect x="28" y="28" width="44" height="44" rx="8" fill="none" stroke="white" strokeWidth="6" />
             </svg>
             Booklync
-          </a>
+          </Link>
 
           {/* Nav */}
           <nav className="flex-1">
@@ -311,7 +314,7 @@ export default function DashboardShell() {
 
         {/* Content */}
         <main className="flex-1 p-8 bg-surface-soft">
-          <Outlet />
+          {children}
         </main>
       </div>
     </div>

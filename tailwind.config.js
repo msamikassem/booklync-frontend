@@ -2,7 +2,6 @@
 export default {
   darkMode: ["class"],
   content: [
-    "./index.html",
     "./src/**/*.{ts,tsx}",
   ],
   theme: {
@@ -55,9 +54,9 @@ export default {
         "badge-emerald": "#34d399",
       },
       fontFamily: {
-        display: ["Satoshi", "Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
-        body: ["Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
-        mono: ["JetBrains Mono", "ui-monospace", "SF Mono", "Menlo", "monospace"],
+        display: ["var(--font-satoshi)", "var(--font-inter)", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
+        body: ["var(--font-inter)", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
+        mono: ["var(--font-jetbrains)", "ui-monospace", "SF Mono", "Menlo", "monospace"],
       },
       borderRadius: {
         lg: "var(--radius)",

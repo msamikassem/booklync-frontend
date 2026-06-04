@@ -10,7 +10,7 @@
 
 import { storage } from "./storage";
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000/api/v1";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000/api/v1";
 
 let _refreshPromise: Promise<boolean> | null = null;
 
