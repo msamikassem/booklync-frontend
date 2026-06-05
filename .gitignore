@@ -11,3 +11,7 @@ next-env.d.ts
 
 # Vercel
 .vercel
+
+# Local AI/skills tooling (agentation skill) — not app code, not deployed
+.agents/
+skills-lock.json

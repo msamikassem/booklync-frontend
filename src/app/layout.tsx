@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Agentation } from "agentation";
 import { inter, jetbrainsMono, satoshi } from "./fonts";
 import "@/index.css";
 
@@ -21,7 +22,12 @@ export default function RootLayout({
       lang="en"
       className={`${satoshi.variable} ${inter.variable} ${jetbrainsMono.variable}`}
     >
-      <body>{children}</body>
+      <body>
+        {children}
+        {/* Dev-only visual feedback toolbar; sibling (not a provider) so the
+            SSR public tree stays server-rendered. Renders nothing in prod. */}
+        {process.env.NODE_ENV === "development" && <Agentation />}
+      </body>
     </html>
   );
 }
