@@ -8,7 +8,6 @@
 
 import { useState } from "react";
 import type { FormEvent } from "react";
-import { useRouter } from "next/navigation";
 import { API_BASE } from "../auth/client";
 import { storage } from "../auth/storage";
 import { isStaffOnlyUser } from "../contexts/AuthContext";
@@ -16,7 +15,6 @@ import { formatApiError } from "../lib/errors";
 import type { UserMeResponse, AuthTokenResponse, ApiError } from "../api/types";
 
 export default function Login() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
@@ -66,7 +64,13 @@ export default function Login() {
 
       const staffOnly = isStaffOnlyUser(me);
       storage.save(tokens, remember, staffOnly ? "staff" : "business");
-      router.replace(staffOnly ? "/staff" : "/dashboard");
+      // Full-page navigation (not router.replace): the auth providers live in the
+      // persistent (app) layout and would NOT remount on a client-side transition,
+      // so their `me`/`agents` queries — resolved to null while we were on /login
+      // with no token — would stay stale (missing tabs, placeholder name) until a
+      // manual refresh. A hard navigation remounts them and fetches identity with
+      // the freshly-stored token. Mirrors how logout() navigates.
+      window.location.replace(staffOnly ? "/staff" : "/dashboard");
     } catch {
       setError("Could not reach the server. Make sure the backend is running.");
     } finally {
