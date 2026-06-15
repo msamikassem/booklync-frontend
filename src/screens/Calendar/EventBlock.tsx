@@ -2,16 +2,16 @@ import { calApptLocalParts, calApptDuration, calApptShortTime, calSvcColorStyle,
 import type { AppointmentDetailResponse } from "./types";
 import type { CalBreak } from "./api";
 
-// Solid palette — applied via inline style so CSS load order can never override them
+// Fresha-style pastel palette — applied via inline style so CSS load order can never override them
 const PALETTE = [
-  "#0ea5e9", // sky
-  "#10b981", // emerald
-  "#ec4899", // pink
-  "#d946ef", // fuchsia
-  "#f59e0b", // amber
-  "#f97316", // orange
-  "#8b5cf6", // violet
-  "#84cc16", // lime
+  "#a3d9e8", // sky
+  "#a3e8c8", // mint
+  "#ffc6dc", // light pink
+  "#ff9ec0", // hot pink
+  "#ffd699", // peach
+  "#ffb380", // orange
+  "#d4c1f0", // lavender
+  "#c5e8a3", // lime
 ];
 
 function paletteColor(cls: string): string {

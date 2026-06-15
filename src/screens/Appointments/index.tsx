@@ -156,8 +156,8 @@ export default function Appointments() {
         </Select>
 
         {canCreate && (
-          <Button onClick={() => setShowNew(true)} className="gap-1.5 ml-auto">
-            <Plus className="h-3.5 w-3.5" /> New appointment
+          <Button onClick={() => setShowNew(true)} className="gap-1.5 ml-auto group transition-all duration-200 hover:scale-105 active:scale-95">
+            <Plus className="h-3.5 w-3.5 transition-transform duration-200 group-hover:rotate-90" /> New appointment
           </Button>
         )}
       </div>

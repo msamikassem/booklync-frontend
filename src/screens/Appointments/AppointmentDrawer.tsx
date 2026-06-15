@@ -7,7 +7,7 @@ import { cn, getInitials, avatarColor } from "../../lib/utils";
 import { fmtDate, fmtTime, apptDuration, fmtPhone } from "./utils";
 import { STATUS_LABELS, SOURCE_LABELS } from "./types";
 import type { AppointmentDetailResponse, ApiError } from "./types";
-import { Sheet, SheetContent, SheetClose } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetClose, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -26,6 +26,7 @@ const STATUS_BADGE: Record<string, string> = {
   completed: "bg-green-100 text-green-800 border-transparent hover:bg-green-100",
   no_show:   "bg-red-100 text-red-700 border-transparent hover:bg-red-100",
 };
+
 
 interface Props {
   appt: AppointmentDetailResponse;
@@ -84,6 +85,7 @@ export function AppointmentDrawer({ appt, tz, isStaff, canUpdateStatus, onClose,
   return (
     <Sheet open={true} onOpenChange={(open) => !open && onClose()}>
       <SheetContent side="right" hideClose className="w-96 p-0 flex flex-col">
+        <SheetTitle className="sr-only">{custName} — Appointment</SheetTitle>
         {/* Header */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-hairline flex-shrink-0">
           <Avatar className="h-10 w-10 flex-shrink-0">
@@ -121,54 +123,67 @@ export function AppointmentDrawer({ appt, tz, isStaff, canUpdateStatus, onClose,
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="flex-1 overflow-y-auto">
           {/* Details tab */}
           {tab === "details" && (
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-2 text-sm">
+            <div className="flex flex-col">
+
+              {/* Customer section */}
+              <div className="flex flex-col gap-[11px] px-5 py-[18px]">
                 <Row label="Customer" value={custName} />
                 {phone && <Row label="Phone" value={fmtPhone(phone)} />}
+              </div>
+
+              <div className="h-px bg-hairline flex-shrink-0" />
+
+              {/* Appointment section */}
+              <div className="flex flex-col gap-[11px] px-5 py-[18px]">
                 {svcLabel && <Row label="Service" value={svcLabel + (durMins ? ` · ${durMins} min` : "")} />}
                 <Row label="Employee" value={appt.employee_name ?? "—"} />
                 <Row label="Date & time" value={`${fmtDate(local, tz)} · ${fmtTime(local, tz)}`} />
                 {appt.source && <Row label="Source" value={SOURCE_LABELS[appt.source] ?? appt.source} />}
-                {appt.note && (
-                  <div>
-                    <div className="text-xs font-medium text-muted uppercase tracking-wide mb-1">Note</div>
-                    <div className="text-ink bg-surface-soft rounded px-3 py-2 text-sm">{appt.note}</div>
-                  </div>
-                )}
               </div>
 
-              {canUpdateStatus && (
-                <div>
-                  <div className="text-xs font-medium text-muted uppercase tracking-wide mb-1.5">Status</div>
-                  <Select value={status} onValueChange={setStatus}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STATUS_OPTIONS.map(s => (
-                        <SelectItem key={s} value={s} disabled={isStaff && !STAFF_ALLOWED.has(s)}>
-                          {STATUS_LABELS[s]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              {appt.note && (
+                <>
+                  <div className="h-px bg-hairline flex-shrink-0" />
+                  <div className="px-5 py-[18px]">
+                    <div className="text-xs font-medium text-muted uppercase tracking-wide mb-2">Note</div>
+                    <div className="text-[13px] text-ink italic leading-relaxed">{appt.note}</div>
+                  </div>
+                </>
               )}
 
-              {err && <p className="text-sm text-error bg-red-50 border border-red-200 rounded-md px-3 py-2">{err}</p>}
-
-              {dirty && canUpdateStatus && (
-                <div className="flex gap-2">
-                  <Button onClick={handleSave} disabled={saving} className="flex-1">
-                    {saving ? "Saving…" : "Save changes"}
-                  </Button>
-                  <Button variant="outline" onClick={() => { setStatus(appt.status ?? "pending"); setErr(null); }}>
-                    Reset
-                  </Button>
-                </div>
+              {canUpdateStatus && (
+                <>
+                  <div className="h-px bg-hairline flex-shrink-0" />
+                  <div className="flex flex-col gap-3 px-5 py-[18px]">
+                    <div className="text-xs font-medium text-muted uppercase tracking-wide">Status</div>
+                    <Select value={status} onValueChange={setStatus}>
+                      <SelectTrigger className="w-full border border-slate-300 shadow-[0_2px_8px_rgba(0,0,0,0.1)] font-medium text-ink">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {STATUS_OPTIONS.map(s => (
+                          <SelectItem key={s} value={s} disabled={isStaff && !STAFF_ALLOWED.has(s)}>
+                            {STATUS_LABELS[s]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {err && <p className="text-sm text-error bg-red-50 border border-red-200 rounded-md px-3 py-2">{err}</p>}
+                    {dirty && (
+                      <div className="flex gap-2">
+                        <Button onClick={handleSave} disabled={saving} className="flex-1">
+                          {saving ? "Saving…" : "Save changes"}
+                        </Button>
+                        <Button variant="outline" onClick={() => { setStatus(appt.status ?? "pending"); setErr(null); }}>
+                          Reset
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </div>
           )}
@@ -214,9 +229,9 @@ export function AppointmentDrawer({ appt, tz, isStaff, canUpdateStatus, onClose,
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <div className="text-xs font-medium text-muted uppercase tracking-wide mb-0.5">{label}</div>
-      <div className="text-ink">{value}</div>
+    <div className="flex justify-between items-baseline gap-4">
+      <span className="text-[12.5px] font-medium text-muted flex-shrink-0">{label}</span>
+      <span className="text-[13px] font-medium text-ink text-right">{value}</span>
     </div>
   );
 }
