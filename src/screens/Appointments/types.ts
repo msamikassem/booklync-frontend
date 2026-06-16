@@ -1,6 +1,10 @@
 import type { components } from "../../api/schema";
 
-export type AppointmentDetailResponse = components["schemas"]["AppointmentDetailResponse"];
+// `booking_group_id` links the appointments booked together as one multi-service
+// visit (shared id across lines; null for single bookings). Added here as an
+// extension so we don't have to regenerate the whole OpenAPI schema file.
+export type AppointmentDetailResponse =
+  components["schemas"]["AppointmentDetailResponse"] & { booking_group_id?: string | null };
 export type AppointmentStatus = components["schemas"]["AppointmentStatusEnum"];
 
 export interface ApptEmployee { id: number; name: string; }

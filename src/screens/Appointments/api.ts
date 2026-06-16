@@ -30,6 +30,18 @@ export const appointmentsApi = {
     return res.json();
   },
 
+  // Book several services in one visit (back-to-back). Returns the created
+  // appointments in schedule order.
+  async createBatch(body: Record<string, unknown>): Promise<AppointmentDetailResponse[]> {
+    const res = await apiFetch("/appointments/batch", { method: "POST", body: JSON.stringify(body) });
+    if (!res.ok) {
+      const d = await res.json();
+      throw Object.assign(new Error("Create failed"), { data: d });
+    }
+    const d = await res.json();
+    return d.appointments ?? [];
+  },
+
   async updateStatus(id: number, status: string): Promise<AppointmentDetailResponse> {
     const res = await apiFetch(`/appointments/${id}/status`, {
       method: "PATCH", body: JSON.stringify({ status }),

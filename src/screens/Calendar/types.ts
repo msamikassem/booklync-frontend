@@ -15,4 +15,4 @@ export interface CalRange {
   pxPerMin: number;
 }
 
-export const ROW_H = 64; // px per hour — matches CSS --cal-row-h
+export const ROW_H = 96; // px per hour — MUST match CSS --cal-row-h in Calendar.css

@@ -1,7 +1,8 @@
 import { EventBlock } from "./EventBlock";
+import { VisitBlock } from "./VisitBlock";
 import {
   calDow, calApptLocalParts, calAgentNow, calWeekStart, calAddDays,
-  calToISODate, calRangeFromBH, calComputeTimeRange,
+  calToISODate, calRangeFromBH, calComputeTimeRange, calGroupVisits,
 } from "./utils";
 import { ROW_H } from "./types";
 import type { AgentTimeRef } from "./utils";
@@ -117,6 +118,7 @@ export function WeekView({
 
                 const colAppts = appointments.filter(a => {
                   if (Number(a.employee_id) !== employee.id) return false;
+                  if ((a.status ?? "pending") === "cancelled") return false;
                   const p = calApptLocalParts(a, tz);
                   return p?.dateISO === dateISO;
                 });
@@ -148,9 +150,15 @@ export function WeekView({
                       );
                     })}
 
-                    {/* Events */}
-                    {colAppts.map(a => {
-                      if ((a.status ?? "pending") === "cancelled") return null;
+                    {/* Events — multi-service visits merge into one block */}
+                    {calGroupVisits(colAppts, tz).map(run => {
+                      if (run.length >= 2) {
+                        return (
+                          <VisitBlock key={`v-${run[0].id}`} appts={run} pxPerMin={pxPerMin}
+                            startHour={startHour} hourCount={hourCount} tz={tz} onSelect={onSelectAppt} />
+                        );
+                      }
+                      const a = run[0];
                       return (
                         <EventBlock key={a.id} appt={a} pxPerMin={pxPerMin} startHour={startHour}
                           hourCount={hourCount} todayBreaks={todayBreaks} conflict={conflict} tz={tz}

@@ -12,6 +12,7 @@ import {
   calMonthStart, calMonthEnd, calAgentNow, calFormatDateLabel,
 } from "../Calendar/utils";
 import type { AgentTimeRef } from "../Calendar/utils";
+import { localInputToUtc } from "../Appointments/utils";
 import type { CalEmployee, CalWorkingHour, CalBreak, CalDayOff } from "../Calendar/api";
 import type { AppointmentDetailResponse } from "../Calendar/types";
 
@@ -19,12 +20,21 @@ type CalView = "day" | "week" | "month";
 
 const STAFF_BRANCH_KEY = "staff_active_agent_id";
 
-/** Range to fetch — widened ±1 day so the timezone re-bucket can't drop edge events. */
-function computeCalRange(view: CalView, d: Date): { dateFrom: string; dateTo: string } {
-  const widen = (start: Date, end: Date) => ({
-    dateFrom: calToISODate(calAddDays(start, -1)),
-    dateTo:   calToISODate(calAddDays(end, 1)),
-  });
+/**
+ * Range to fetch — widened ±1 day, then converted from BRANCH-local day edges to
+ * explicit UTC datetimes so the backend filter is correct regardless of the DB
+ * server's session timezone (a bare "YYYY-MM-DD" gets reinterpreted in the
+ * server clock and can silently drop appointments). Mirror of Calendar/index.tsx.
+ */
+function computeCalRange(view: CalView, d: Date, tz: string): { dateFrom: string; dateTo: string } {
+  const widen = (start: Date, end: Date) => {
+    const fromLocal = calToISODate(calAddDays(start, -1));
+    const toLocal   = calToISODate(calAddDays(end, 1));
+    return {
+      dateFrom: localInputToUtc(`${fromLocal}T00:00`, tz) ?? fromLocal,
+      dateTo:   localInputToUtc(`${toLocal}T23:59`, tz) ?? toLocal,
+    };
+  };
   if (view === "day") return widen(d, d);
   if (view === "week") {
     const ws = calWeekStart(d);
@@ -135,7 +145,7 @@ export default function StaffDashboard() {
   }, [agentId, todayISO]);
 
   // ── Data ──────────────────────────────────────────────────────────────────
-  const { dateFrom, dateTo } = useMemo(() => computeCalRange(view, currentDate), [view, currentDate]);
+  const { dateFrom, dateTo } = useMemo(() => computeCalRange(view, currentDate, tz), [view, currentDate, tz]);
 
   const { data: appointments = [], refetch: refetchAppts } = useQuery({
     queryKey: ["staff-appts", agentId, dateFrom, dateTo],

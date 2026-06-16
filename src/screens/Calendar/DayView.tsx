@@ -1,7 +1,8 @@
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect } from "react";
 import { EventBlock } from "./EventBlock";
+import { VisitBlock } from "./VisitBlock";
 import {
-  calDow, calApptLocalParts, calAgentNow, calRangeFromBH, calComputeTimeRange, calEmpColor,
+  calDow, calApptLocalParts, calAgentNow, calRangeFromBH, calComputeTimeRange, calEmpColor, calGroupVisits,
 } from "./utils";
 import { ROW_H } from "./types";
 import type { AgentTimeRef } from "./utils";
@@ -41,7 +42,6 @@ export function DayView({
   businessHours, branchDaysOff, agentTimeRef, tz, canCreate, onSelectAppt, onSlotClick,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [, setHoveredPrepAppt] = useState<number | null>(null);
 
   const dow = calDow(dateObj);
   const bRange = calRangeFromBH(businessHours, dow);
@@ -120,6 +120,7 @@ export function DayView({
 
               const empAppts = appointments.filter(a => {
                 if (Number(a.employee_id) !== emp.id) return false;
+                if ((a.status ?? "pending") === "cancelled") return false;
                 const p = calApptLocalParts(a, tz);
                 return p?.dateISO === dateISO;
               });
@@ -148,16 +149,20 @@ export function DayView({
                     );
                   })}
 
-                  {/* Events */}
-                  {empAppts.map(a => {
-                    if ((a.status ?? "pending") === "cancelled") return null;
+                  {/* Events — multi-service visits merge into one block */}
+                  {calGroupVisits(empAppts, tz).map(run => {
+                    if (run.length >= 2) {
+                      return (
+                        <VisitBlock key={`v-${run[0].id}`} appts={run} pxPerMin={pxPerMin}
+                          startHour={startHour} hourCount={hourCount} tz={tz} onSelect={onSelectAppt} />
+                      );
+                    }
+                    const a = run[0];
                     const breaks = (breaksMap.get(emp.id) ?? []).filter(b => b.day_of_week === dow);
                     return (
                       <EventBlock key={a.id} appt={a} pxPerMin={pxPerMin} startHour={startHour}
                         hourCount={hourCount} todayBreaks={breaks} conflict={conflict} tz={tz}
                         onClick={() => onSelectAppt(a)}
-                        onMouseEnter={() => setHoveredPrepAppt(a.id)}
-                        onMouseLeave={() => setHoveredPrepAppt(null)}
                       />
                     );
                   })}

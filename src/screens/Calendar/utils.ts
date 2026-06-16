@@ -147,6 +147,35 @@ export function calApptDuration(appt: AppointmentDetailResponse): number {
   return 30;
 }
 
+/**
+ * Group a single column's appointments into "visits" — runs of appointments
+ * that were booked together (same `booking_group_id`), are performed by the same
+ * employee, and are contiguous in time (each starts where the previous ends).
+ * Each run is returned in start order; runs of one are ordinary appointments.
+ * Callers (DayView / WeekView) already pass a single employee's list, but the
+ * employee check keeps the helper correct regardless of caller.
+ */
+export function calGroupVisits(appts: AppointmentDetailResponse[], tz?: string): AppointmentDetailResponse[][] {
+  const sorted = [...appts].sort(
+    (a, b) => (calApptLocalParts(a, tz)?.minutes ?? 0) - (calApptLocalParts(b, tz)?.minutes ?? 0)
+  );
+  const runs: AppointmentDetailResponse[][] = [];
+  for (const a of sorted) {
+    const run = runs[runs.length - 1];
+    if (run) {
+      const prev = run[run.length - 1];
+      const pp = calApptLocalParts(prev, tz);
+      const ap = calApptLocalParts(a, tz);
+      const sameGroup = !!a.booking_group_id && a.booking_group_id === prev.booking_group_id;
+      const sameEmp = Number(a.employee_id) === Number(prev.employee_id);
+      const contiguous = !!pp && !!ap && Math.abs(ap.minutes - (pp.minutes + calApptDuration(prev))) <= 1;
+      if (sameGroup && sameEmp && contiguous) { run.push(a); continue; }
+    }
+    runs.push([a]);
+  }
+  return runs;
+}
+
 /** Short time string from start_time_local. */
 export function calApptShortTime(appt: AppointmentDetailResponse, which: "start"|"end", tz?: string): string {
   const localKey = which==="end" ? "end_time_local" : "start_time_local";

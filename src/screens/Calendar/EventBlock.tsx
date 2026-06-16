@@ -1,4 +1,5 @@
 import { calApptLocalParts, calApptDuration, calApptShortTime, calSvcColorStyle, calServiceColorClass } from "./utils";
+import { ROW_H } from "./types";
 import type { AppointmentDetailResponse } from "./types";
 import type { CalBreak } from "./api";
 
@@ -19,6 +20,11 @@ function paletteColor(cls: string): string {
   return PALETTE[isNaN(idx) ? 0 : idx % PALETTE.length];
 }
 
+/** Resolve an appointment's block background: explicit service colour, else palette. */
+export function apptBg(appt: AppointmentDetailResponse): string {
+  return calSvcColorStyle(appt.service_color ?? null) || paletteColor(calServiceColorClass(appt));
+}
+
 interface Props {
   appt: AppointmentDetailResponse;
   pxPerMin: number;
@@ -28,23 +34,19 @@ interface Props {
   conflict?: boolean;
   tz?: string;
   onClick: () => void;
-  onMouseEnter?: () => void;
-  onMouseLeave?: () => void;
 }
 
-export function EventBlock({ appt, pxPerMin, startHour, hourCount, todayBreaks, conflict, tz, onClick, onMouseEnter, onMouseLeave }: Props) {
+export function EventBlock({ appt, pxPerMin, startHour, hourCount, todayBreaks, conflict, tz, onClick }: Props) {
   const p = calApptLocalParts(appt, tz);
   if (!p) return null;
 
   const dur    = Math.max(15, calApptDuration(appt));
   const top    = Math.round((p.minutes - startHour * 60) * pxPerMin);
   const height = Math.max(20, Math.round(dur * pxPerMin) - 2);
-  if (top + height < 0 || top > hourCount * 64) return null;
+  if (top + height < 0 || top > hourCount * ROW_H) return null;
 
   const status   = appt.status ?? "pending";
-  const colorCls = calServiceColorClass(appt);
-  const svcBg    = calSvcColorStyle(appt.service_color ?? null);
-  const bg       = svcBg || paletteColor(colorCls);
+  const bg       = apptBg(appt);
 
   const startStr = calApptShortTime(appt, "start", tz);
   const endStr   = calApptShortTime(appt, "end", tz);
@@ -86,8 +88,6 @@ export function EventBlock({ appt, pxPerMin, startHour, hourCount, todayBreaks, 
         style={evStyle}
         data-appt-id={appt.id}
         onClick={(e) => { e.stopPropagation(); onClick(); }}
-        onMouseEnter={onMouseEnter}
-        onMouseLeave={onMouseLeave}
       >
         <div className="cal-ev-inner">
           <span className="cal-ev-time">{timeStr}</span>

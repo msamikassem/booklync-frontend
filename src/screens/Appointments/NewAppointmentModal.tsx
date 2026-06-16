@@ -6,12 +6,12 @@ import { employeesApi } from "../Employees/api";
 import { formatApiError } from "../../lib/errors";
 import { localInputToUtc, utcToLocalInput, extractPrepSuggestedTime } from "./utils";
 import type { AppointmentDetailResponse, ApptEmployee, ApiError } from "./types";
-import type { ServiceCatalogueResponse, CustomerResponse } from "../../api/types";
+import type { ServiceCatalogueResponse, ServiceResponse, CustomerResponse } from "../../api/types";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Search, Clock } from "lucide-react";
+import { Search, Clock, Plus, X } from "lucide-react";
 
 interface Props {
   agentId: number;
@@ -25,6 +25,33 @@ interface Props {
   onCreated: (appt: AppointmentDetailResponse) => void;
 }
 
+/** One service line being booked in the visit. */
+interface ServiceRow {
+  key: string;
+  serviceId: string;
+  variationId: string;
+  employeeId: string;
+}
+
+const newRow = (employeeId = ""): ServiceRow => ({
+  key: (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : String(Math.random()),
+  serviceId: "",
+  variationId: "",
+  employeeId,
+});
+
+/** Add `offset` minutes to a local "HH:MM" base and format as e.g. "2:05 PM". */
+function fmtClock(baseTime: string, offsetMin: number): string {
+  const [h, m] = baseTime.split(":").map(Number);
+  let total = h * 60 + m + offsetMin;
+  total = ((total % 1440) + 1440) % 1440;
+  const hh = Math.floor(total / 60);
+  const mm = total % 60;
+  const ampm = hh >= 12 ? "PM" : "AM";
+  const h12 = hh % 12 === 0 ? 12 : hh % 12;
+  return `${h12}:${String(mm).padStart(2, "0")} ${ampm}`;
+}
+
 export function NewAppointmentModal({ agentId, tz, employees, catalogue, prefillEmpId, prefillDate, prefillTime, onClose, onCreated }: Props) {
   const defaultLocal = (prefillDate && prefillTime)
     ? `${prefillDate}T${prefillTime}`
@@ -36,9 +63,9 @@ export function NewAppointmentModal({ agentId, tz, employees, catalogue, prefill
 
   const [customerId, setCustomerId] = useState("");
   const [customerDisplay, setCustomerDisplay] = useState("");
-  const [serviceId, setServiceId] = useState("");
-  const [variationId, setVariationId] = useState("");
-  const [employeeId, setEmployeeId] = useState(prefillEmpId ? String(prefillEmpId) : "");
+  const [rows, setRows] = useState<ServiceRow[]>([newRow(prefillEmpId ? String(prefillEmpId) : "")]);
+  // Employee surcharge per row (reported up by each ServiceRowFields child), keyed by row.key.
+  const [extras, setExtras] = useState<Record<string, number>>({});
   const [date, setDate] = useState(datePart);
   const [time, setTime] = useState(timePart);
   const [note, setNote] = useState("");
@@ -65,30 +92,6 @@ export function NewAppointmentModal({ agentId, tz, employees, catalogue, prefill
         (c.phone ?? "").toLowerCase().includes(custSearch.toLowerCase()))
     : customers;
 
-  const { data: svcEmployees } = useQuery({
-    queryKey: ["service-employees", Number(serviceId), agentId],
-    queryFn: () => servicesApi.getEmployees(Number(serviceId), agentId),
-    enabled: !!serviceId,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  useEffect(() => {
-    if (!svcEmployees || !employeeId) return;
-    const capable = svcEmployees.some(e => String(e.id) === employeeId);
-    if (!capable) setEmployeeId("");
-  }, [svcEmployees, employeeId]);
-
-  const filteredEmployees = serviceId && svcEmployees
-    ? employees.filter(e => svcEmployees.some(se => se.id === e.id))
-    : employees;
-
-  const { data: empCaps = [] } = useQuery({
-    queryKey: ["emp-caps", Number(employeeId), agentId],
-    queryFn: () => employeesApi.getCapabilities(Number(employeeId), agentId),
-    enabled: !!employeeId,
-    staleTime: 5 * 60 * 1000,
-  });
-
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (!custPickerRef.current?.contains(e.target as Node)) setCustDropOpen(false);
@@ -102,25 +105,56 @@ export function NewAppointmentModal({ agentId, tz, employees, catalogue, prefill
     ...(catalogue?.titles ?? []).flatMap(t => t.services ?? []),
   ];
 
-  const selectedSvc = allSvcs.find(s => s.id === Number(serviceId));
-  const hasVariations = (selectedSvc?.variations?.length ?? 0) > 0;
-  const selectedVar = hasVariations ? selectedSvc?.variations?.find(v => v.id === Number(variationId)) : undefined;
-
-  const basePrice = selectedVar
-    ? parseFloat(selectedVar.price as string)
-    : selectedSvc && !hasVariations ? parseFloat((selectedSvc.price ?? "0") as string) : null;
-  const durMins = selectedVar?.duration_minutes ?? (selectedSvc && !hasVariations ? selectedSvc.duration_minutes : null);
-
-  let extraPrice = 0;
-  if (empCaps.length && serviceId) {
-    let cap = variationId ? empCaps.find(c => c.variation_id === Number(variationId)) : null;
-    if (!cap) cap = empCaps.find(c => c.service_id === Number(serviceId));
-    if (!cap && selectedSvc?.title_id) cap = empCaps.find(c => c.title_id === selectedSvc.title_id);
-    if (cap) extraPrice = parseFloat(cap.extra_price as string ?? "0");
+  function svcFor(r: ServiceRow): ServiceResponse | undefined {
+    return allSvcs.find(s => s.id === Number(r.serviceId));
+  }
+  function hasVariations(svc: ServiceResponse | undefined): boolean {
+    return (svc?.variations?.length ?? 0) > 0;
+  }
+  function rowDuration(r: ServiceRow): number | null {
+    const svc = svcFor(r);
+    if (!svc) return null;
+    if (hasVariations(svc)) {
+      const v = svc.variations?.find(v => v.id === Number(r.variationId));
+      return v?.duration_minutes ?? null;
+    }
+    return svc.duration_minutes ?? null;
+  }
+  function rowBasePrice(r: ServiceRow): number | null {
+    const svc = svcFor(r);
+    if (!svc) return null;
+    if (hasVariations(svc)) {
+      const v = svc.variations?.find(v => v.id === Number(r.variationId));
+      return v ? parseFloat(v.price as string) : null;
+    }
+    return parseFloat((svc.price ?? "0") as string);
   }
 
-  const totalPrice = basePrice !== null ? basePrice + extraPrice : null;
-  const showPriceStrip = totalPrice !== null && !!serviceId && !!employeeId && (!hasVariations || !!variationId);
+  // Sequential schedule: each row begins where the previous ends.
+  let offsetAcc = 0;
+  const schedule = rows.map(r => {
+    const dur = rowDuration(r);
+    const start = offsetAcc;
+    const end = offsetAcc + (dur ?? 0);
+    if (dur != null) offsetAcc = end;
+    return { startOffset: start, endOffset: end, dur };
+  });
+  const totalDuration = offsetAcc;
+  const allRowsPriced = rows.every(r => rowBasePrice(r) != null && rowDuration(r) != null
+    && (!hasVariations(svcFor(r)) || !!r.variationId) && !!r.employeeId);
+  const grandTotal = rows.reduce((sum, r) => sum + (rowBasePrice(r) ?? 0) + (extras[r.key] ?? 0), 0);
+
+  function updateRow(key: string, patch: Partial<ServiceRow>) {
+    setRows(rs => rs.map(r => (r.key === key ? { ...r, ...patch } : r)));
+  }
+  function addRow() {
+    // default the new row's staff to the first row's staff (common case: one stylist)
+    setRows(rs => [...rs, newRow(rs[0]?.employeeId ?? "")]);
+  }
+  function removeRow(key: string) {
+    setRows(rs => (rs.length > 1 ? rs.filter(r => r.key !== key) : rs));
+    setExtras(e => { const n = { ...e }; delete n[key]; return n; });
+  }
 
   function selectCustomer(c: CustomerResponse) {
     setCustomerId(String(c.id));
@@ -131,33 +165,56 @@ export function NewAppointmentModal({ agentId, tz, employees, catalogue, prefill
 
   async function handleSave() {
     setErr(null); setErrType("error"); setPrepSuggested(null);
-    if (!customerId)                   { setErr("Please select a customer.");   return; }
-    if (!serviceId)                    { setErr("Please select a service.");    return; }
-    if (hasVariations && !variationId) { setErr("Please select a variation.");  return; }
-    if (!employeeId)                   { setErr("Please select an employee.");  return; }
-    if (!date)                         { setErr("Please set a date.");          return; }
-    if (!time)                         { setErr("Please set a time.");          return; }
+    if (!customerId) { setErr("Please select a customer."); return; }
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const label = rows.length > 1 ? `Service ${i + 1}: ` : "";
+      if (!r.serviceId) { setErr(`${label}please select a service.`); return; }
+      if (hasVariations(svcFor(r)) && !r.variationId) { setErr(`${label}please select a variation.`); return; }
+      if (!r.employeeId) { setErr(`${label}please select an employee.`); return; }
+    }
+    if (!date) { setErr("Please set a date."); return; }
+    if (!time) { setErr("Please set a time."); return; }
 
     const startUtc = localInputToUtc(`${date}T${time}`, tz);
     if (!startUtc) { setErr("Invalid date/time."); return; }
 
     setSaving(true);
     try {
-      const created = await appointmentsApi.create({
-        agent_id:    agentId,
-        customer_id: Number(customerId),
-        service_id:  Number(serviceId),
-        employee_id: Number(employeeId),
-        start_time:  startUtc,
-        source:      "manual",
-        ...(variationId ? { variation_id: Number(variationId) } : {}),
-        ...(note.trim() ? { note: note.trim() } : {}),
-      });
-      onCreated(created);
+      if (rows.length === 1) {
+        // Single service — keep the existing endpoint (and its prep-conflict
+        // "Book at …" one-click suggestion) untouched.
+        const r = rows[0];
+        const created = await appointmentsApi.create({
+          agent_id: agentId,
+          customer_id: Number(customerId),
+          service_id: Number(r.serviceId),
+          employee_id: Number(r.employeeId),
+          start_time: startUtc,
+          source: "manual",
+          ...(r.variationId ? { variation_id: Number(r.variationId) } : {}),
+          ...(note.trim() ? { note: note.trim() } : {}),
+        });
+        onCreated(created);
+      } else {
+        const created = await appointmentsApi.createBatch({
+          agent_id: agentId,
+          customer_id: Number(customerId),
+          start_time: startUtc,
+          source: "manual",
+          ...(note.trim() ? { note: note.trim() } : {}),
+          items: rows.map(r => ({
+            service_id: Number(r.serviceId),
+            employee_id: Number(r.employeeId),
+            ...(r.variationId ? { variation_id: Number(r.variationId) } : {}),
+          })),
+        });
+        if (created.length) onCreated(created[0]);
+      }
       onClose();
     } catch (e: unknown) {
       const data = (e as { data?: ApiError }).data;
-      if ((data as { code?: string })?.code === "PREP_TIME_CONFLICT") {
+      if ((data as { code?: string })?.code === "PREP_TIME_CONFLICT" && rows.length === 1) {
         const suggested = extractPrepSuggestedTime(data?.detail ?? "");
         setErrType("prep_conflict");
         setErr(formatApiError(data ?? {}, "Scheduling conflict — preparation time overlap."));
@@ -232,83 +289,69 @@ export function NewAppointmentModal({ agentId, tz, employees, catalogue, prefill
             {customerId && <p className="text-xs text-success mt-1">Selected: {customerDisplay}</p>}
           </div>
 
-          {/* Service — native select kept for optgroup support */}
-          <FormField label="Service" required>
-            <select value={serviceId}
-              onChange={e => { setServiceId(e.target.value); setVariationId(""); }}
-              className={sCls}>
-              <option value="">Select service…</option>
-              {catalogue?.uncategorised?.length ? (
-                <optgroup label="Uncategorised">
-                  {catalogue.uncategorised.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}{(s.variations?.length ?? 0) > 0 ? ` — ${s.variations!.length} variation${s.variations!.length !== 1 ? "s" : ""}` : ""}</option>
-                  ))}
-                </optgroup>
-              ) : null}
-              {catalogue?.titles?.map(t => (t.services?.length ?? 0) > 0 ? (
-                <optgroup key={t.id} label={t.name}>
-                  {t.services!.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}{(s.variations?.length ?? 0) > 0 ? ` — ${s.variations!.length} variation${s.variations!.length !== 1 ? "s" : ""}` : ""}</option>
-                  ))}
-                </optgroup>
-              ) : null)}
-            </select>
-          </FormField>
-
-          {/* Variation */}
-          {hasVariations && (
-            <FormField label="Variation" required>
-              <select value={variationId} onChange={e => setVariationId(e.target.value)} className={sCls}>
-                <option value="">Select variation…</option>
-                {selectedSvc?.variations?.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-              </select>
-            </FormField>
-          )}
-
-          {/* Employee */}
-          <FormField label="Employee" required>
-            <select value={employeeId} onChange={e => setEmployeeId(e.target.value)} className={sCls}
-              disabled={!!serviceId && filteredEmployees.length === 0}>
-              <option value="">
-                {serviceId && filteredEmployees.length === 0 ? "No employees assigned to this service" : "Select employee…"}
-              </option>
-              {filteredEmployees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-            </select>
-            {serviceId && svcEmployees && filteredEmployees.length === 0 && (
-              <p className="text-xs text-amber-700 mt-1">
-                No employees are assigned to this service. Go to the Services tab to assign employees.
-              </p>
-            )}
-          </FormField>
+          {/* Service rows */}
+          <div className="flex flex-col gap-3">
+            {rows.map((row, i) => (
+              <ServiceRowFields
+                key={row.key}
+                index={i}
+                total={rows.length}
+                agentId={agentId}
+                catalogue={catalogue}
+                employees={employees}
+                row={row}
+                scheduleLabel={
+                  time && schedule[i].dur != null
+                    ? `${fmtClock(time, schedule[i].startOffset)} – ${fmtClock(time, schedule[i].endOffset)}`
+                    : null
+                }
+                onChange={patch => updateRow(row.key, patch)}
+                onExtraPrice={extra => setExtras(e => (e[row.key] === extra ? e : { ...e, [row.key]: extra }))}
+                onRemove={() => removeRow(row.key)}
+                canRemove={rows.length > 1}
+              />
+            ))}
+            <button type="button" onClick={addRow}
+              className="flex items-center justify-center gap-1.5 text-sm font-medium text-primary hover:bg-surface-soft border border-dashed border-hairline rounded-md py-2 transition-colors">
+              <Plus className="h-3.5 w-3.5" />
+              Add another service
+            </button>
+          </div>
 
           {/* Date + time */}
           <div className="grid grid-cols-2 gap-3">
             <FormField label="Date" required>
               <Input type="date" value={date} onChange={e => setDate(e.target.value)} />
             </FormField>
-            <FormField label={<>Time <span className="text-error">*</span> <span className="text-muted font-normal text-xs">({tz.split("/").pop()?.replace("_", " ") ?? tz})</span></>}>
+            <FormField label={<>{rows.length > 1 ? "Start time" : "Time"} <span className="text-error">*</span> <span className="text-muted font-normal text-xs">({tz.split("/").pop()?.replace("_", " ") ?? tz})</span></>}>
               <Input type="time" value={time} onChange={e => setTime(e.target.value)} />
             </FormField>
           </div>
 
-          {/* Price strip */}
-          {showPriceStrip && (
-            <div className="bg-surface-soft rounded-md px-4 py-3 flex flex-col gap-1 text-sm">
-              {durMins && (
-                <div className="flex items-center gap-1.5 text-muted text-xs mb-1">
-                  <Clock className="h-3 w-3" />
-                  {durMins} min
-                </div>
-              )}
-              {extraPrice > 0 && (
-                <>
-                  <div className="flex justify-between text-muted text-xs"><span>Base price</span><span>${basePrice!.toFixed(2)}</span></div>
-                  <div className="flex justify-between text-muted text-xs"><span>Employee extra</span><span>+${extraPrice.toFixed(2)}</span></div>
-                  <div className="border-t border-hairline my-1" />
-                </>
-              )}
+          {/* Summary strip */}
+          {allRowsPriced && (
+            <div className="bg-surface-soft rounded-md px-4 py-3 flex flex-col gap-1.5 text-sm">
+              <div className="flex items-center gap-1.5 text-muted text-xs">
+                <Clock className="h-3 w-3" />
+                {totalDuration} min total{rows.length > 1 ? ` · ${rows.length} services` : ""}
+              </div>
+              {rows.map((r, i) => {
+                const svc = svcFor(r);
+                const base = rowBasePrice(r) ?? 0;
+                const extra = extras[r.key] ?? 0;
+                return (
+                  <div key={r.key} className="flex justify-between text-xs text-muted">
+                    <span className="truncate pr-2">
+                      {time && schedule[i].dur != null ? `${fmtClock(time, schedule[i].startOffset)}  ` : ""}
+                      {svc?.name}{extra > 0 ? " (+extra)" : ""}
+                    </span>
+                    <span className="flex-shrink-0">${(base + extra).toFixed(2)}</span>
+                  </div>
+                );
+              })}
+              <div className="border-t border-hairline my-0.5" />
               <div className="flex justify-between font-semibold text-ink">
-                <span>Total</span><span>${totalPrice!.toFixed(2)}</span>
+                <span>Total</span><span>${grandTotal.toFixed(2)}</span>
               </div>
             </div>
           )}
@@ -323,12 +366,144 @@ export function NewAppointmentModal({ agentId, tz, employees, catalogue, prefill
 
         <div className="flex gap-3 px-6 pb-5 flex-shrink-0 border-t border-hairline pt-4">
           <Button onClick={handleSave} disabled={saving} className="flex-1">
-            {saving ? "Creating…" : "Create appointment"}
+            {saving ? "Creating…" : rows.length > 1 ? `Book ${rows.length} services` : "Create appointment"}
           </Button>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// One service line (service + variation + employee), with capability filtering.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface RowProps {
+  index: number;
+  total: number;
+  agentId: number;
+  catalogue: ServiceCatalogueResponse | undefined;
+  employees: ApptEmployee[];
+  row: ServiceRow;
+  scheduleLabel: string | null;
+  onChange: (patch: Partial<ServiceRow>) => void;
+  onExtraPrice: (extra: number) => void;
+  onRemove: () => void;
+  canRemove: boolean;
+}
+
+function ServiceRowFields({ index, total, agentId, catalogue, employees, row, scheduleLabel, onChange, onExtraPrice, onRemove, canRemove }: RowProps) {
+  const allSvcs = [
+    ...(catalogue?.uncategorised ?? []),
+    ...(catalogue?.titles ?? []).flatMap(t => t.services ?? []),
+  ];
+  const selectedSvc = allSvcs.find(s => s.id === Number(row.serviceId));
+  const hasVariations = (selectedSvc?.variations?.length ?? 0) > 0;
+
+  // Employees capable of this row's service (granted at variation/service/title).
+  const { data: svcEmployees } = useQuery({
+    queryKey: ["service-employees", Number(row.serviceId), agentId],
+    queryFn: () => servicesApi.getEmployees(Number(row.serviceId), agentId),
+    enabled: !!row.serviceId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // If the chosen employee can't perform the newly chosen service, clear it.
+  useEffect(() => {
+    if (!svcEmployees || !row.employeeId) return;
+    if (!svcEmployees.some(e => String(e.id) === row.employeeId)) onChange({ employeeId: "" });
+  }, [svcEmployees, row.employeeId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const filteredEmployees = row.serviceId && svcEmployees
+    ? employees.filter(e => svcEmployees.some(se => se.id === e.id))
+    : employees;
+
+  // Employee surcharge (extra_price) for the chosen service/variation, reported up.
+  const { data: empCaps = [] } = useQuery({
+    queryKey: ["emp-caps", Number(row.employeeId), agentId],
+    queryFn: () => employeesApi.getCapabilities(Number(row.employeeId), agentId),
+    enabled: !!row.employeeId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  useEffect(() => {
+    let extra = 0;
+    if (empCaps.length && row.serviceId) {
+      let cap = row.variationId ? empCaps.find(c => c.variation_id === Number(row.variationId)) : null;
+      if (!cap) cap = empCaps.find(c => c.service_id === Number(row.serviceId));
+      if (!cap && selectedSvc?.title_id) cap = empCaps.find(c => c.title_id === selectedSvc.title_id);
+      if (cap) extra = parseFloat((cap.extra_price as string) ?? "0");
+    }
+    onExtraPrice(extra);
+  }, [empCaps, row.serviceId, row.variationId, selectedSvc?.title_id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className={total > 1 ? "rounded-lg border border-hairline p-3 flex flex-col gap-3 relative" : "flex flex-col gap-4"}>
+      {total > 1 && (
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-muted uppercase tracking-wide">Service {index + 1}</span>
+          <div className="flex items-center gap-2">
+            {scheduleLabel && <span className="text-xs text-muted">{scheduleLabel}</span>}
+            {canRemove && (
+              <button type="button" onClick={onRemove} aria-label="Remove service"
+                className="text-muted hover:text-error transition-colors">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Service — native select kept for optgroup support */}
+      <FormField label="Service" required={total === 1}>
+        <select value={row.serviceId}
+          onChange={e => onChange({ serviceId: e.target.value, variationId: "" })}
+          className={sCls}>
+          <option value="">Select service…</option>
+          {catalogue?.uncategorised?.length ? (
+            <optgroup label="Uncategorised">
+              {catalogue.uncategorised.map(s => (
+                <option key={s.id} value={s.id}>{s.name}{(s.variations?.length ?? 0) > 0 ? ` — ${s.variations!.length} variation${s.variations!.length !== 1 ? "s" : ""}` : ""}</option>
+              ))}
+            </optgroup>
+          ) : null}
+          {catalogue?.titles?.map(t => (t.services?.length ?? 0) > 0 ? (
+            <optgroup key={t.id} label={t.name}>
+              {t.services!.map(s => (
+                <option key={s.id} value={s.id}>{s.name}{(s.variations?.length ?? 0) > 0 ? ` — ${s.variations!.length} variation${s.variations!.length !== 1 ? "s" : ""}` : ""}</option>
+              ))}
+            </optgroup>
+          ) : null)}
+        </select>
+      </FormField>
+
+      {/* Variation */}
+      {hasVariations && (
+        <FormField label="Variation" required={total === 1}>
+          <select value={row.variationId} onChange={e => onChange({ variationId: e.target.value })} className={sCls}>
+            <option value="">Select variation…</option>
+            {selectedSvc?.variations?.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+          </select>
+        </FormField>
+      )}
+
+      {/* Employee */}
+      <FormField label="Employee" required={total === 1}>
+        <select value={row.employeeId} onChange={e => onChange({ employeeId: e.target.value })} className={sCls}
+          disabled={!!row.serviceId && filteredEmployees.length === 0}>
+          <option value="">
+            {row.serviceId && filteredEmployees.length === 0 ? "No employees assigned to this service" : "Select employee…"}
+          </option>
+          {filteredEmployees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+        </select>
+        {row.serviceId && svcEmployees && filteredEmployees.length === 0 && (
+          <p className="text-xs text-amber-700 mt-1">
+            No employees are assigned to this service. Go to the Services tab to assign employees.
+          </p>
+        )}
+      </FormField>
+    </div>
   );
 }
 

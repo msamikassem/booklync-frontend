@@ -17,15 +17,26 @@ import {
   calApptLocalParts, calApptDuration,
 } from "./utils";
 import type { AgentTimeRef } from "./utils";
+import { localInputToUtc } from "../Appointments/utils";
 import type { AppointmentDetailResponse } from "./types";
 
 type CalView = "day" | "week" | "month";
 
-function computeCalRange(view: CalView, d: Date): { dateFrom: string; dateTo: string } {
-  const widen = (start: Date, end: Date) => ({
-    dateFrom: calToISODate(calAddDays(start, -1)),
-    dateTo:   calToISODate(calAddDays(end, 1)),
-  });
+// Returns the appointments query window as explicit UTC datetimes derived from
+// the BRANCH timezone (not the viewer's). The visible span is widened ±1 day,
+// then each edge is converted from branch-local midnight/end-of-day to a UTC
+// instant — so the backend filter is correct regardless of the DB server's
+// session timezone (a bare "YYYY-MM-DD" gets reinterpreted in the server clock,
+// which silently drops appointments when that clock is ahead of the branch).
+function computeCalRange(view: CalView, d: Date, tz: string): { dateFrom: string; dateTo: string } {
+  const widen = (start: Date, end: Date) => {
+    const fromLocal = calToISODate(calAddDays(start, -1));
+    const toLocal   = calToISODate(calAddDays(end, 1));
+    return {
+      dateFrom: localInputToUtc(`${fromLocal}T00:00`, tz) ?? fromLocal,
+      dateTo:   localInputToUtc(`${toLocal}T23:59`, tz) ?? toLocal,
+    };
+  };
   if (view === "day") return widen(d, d);
   if (view === "week") {
     const ws = calWeekStart(d);
@@ -113,8 +124,8 @@ export default function Calendar() {
 
   // ── Date range ────────────────────────────────────────────────────────────
   const { dateFrom, dateTo } = useMemo(
-    () => computeCalRange(view, currentDate),
-    [view, currentDate]
+    () => computeCalRange(view, currentDate, tz),
+    [view, currentDate, tz]
   );
 
   // ── Data queries ──────────────────────────────────────────────────────────
