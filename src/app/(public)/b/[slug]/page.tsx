@@ -1,39 +1,50 @@
 import type { Metadata } from "next";
-import {
-  getBranchBySlug,
-  getServices,
-  branchMetadata,
-} from "../../_lib/publicFetch";
+import { getPublishedSite, siteMetadata } from "../../_lib/publicFetch";
+import type { PublicAgent, PublicService } from "../../_lib/publicFetch";
 import BookingView from "../../_components/BookingView";
+import SiteRenderer from "@/site/SiteRenderer";
 
 type Params = Promise<{ slug: string }>;
 
-// Server-rendered <title>/<meta>/OG tags from live branch data. This is what
-// link unfurlers and crawlers read — they never run JS, so it must be here, not
-// set client-side. The branch fetch is de-duplicated with the page body.
-export async function generateMetadata({
-  params,
-}: {
-  params: Params;
-}): Promise<Metadata> {
+// NOTE: this route must NOT read `searchParams` — doing so forces dynamic
+// rendering and defeats the ISR cache that `revalidateTag` swaps on publish.
+// The editor's draft preview lives at its own route: /preview/[slug].
+
+export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { slug } = await params;
-  const branch = await getBranchBySlug(slug).catch(() => null);
-  return branchMetadata(branch);
+  const site = await getPublishedSite(slug).catch(() => null);
+  return siteMetadata(site);
 }
 
-export default async function PublicBookingPage({
-  params,
-}: {
-  params: Params;
-}) {
+export default async function PublicBookingPage({ params }: { params: Params }) {
   const { slug } = await params;
-  const branch = await getBranchBySlug(slug);
-  const services =
-    branch?.booking_page_slug
-      ? (await getServices(branch.booking_page_slug)) ?? []
-      : [];
+  const site = await getPublishedSite(slug);
 
+  // Unknown slug → built-in not-found view.
+  if (!site) {
+    return <BookingView branch={null} services={[]} notFoundLabel={slug} />;
+  }
+
+  // Published builder site → render it.
+  if (site.published && site.config) {
+    return (
+      <SiteRenderer
+        config={site.config}
+        branch={site.branch}
+        services={site.services}
+        brandingRemoved={site.branding_removed}
+      />
+    );
+  }
+
+  // Known branch with no published site yet → the simple built-in booking page
+  // (reuse the identity + services we already fetched). The site payload shapes
+  // are field-compatible with the legacy BookingView props.
   return (
-    <BookingView branch={branch} services={services} notFoundLabel={slug} />
+    <BookingView
+      branch={site.branch as unknown as PublicAgent}
+      services={site.services as unknown as PublicService[]}
+      notFoundLabel={slug}
+    />
   );
 }

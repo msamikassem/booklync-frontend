@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Agentation } from "agentation";
-import { inter, jetbrainsMono, satoshi } from "./fonts";
+import { inter, jetbrainsMono, satoshi, playfair, poppins } from "./fonts";
 import "@/index.css";
 
 export const metadata: Metadata = {
@@ -20,7 +20,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${satoshi.variable} ${inter.variable} ${jetbrainsMono.variable}`}
+      className={`${satoshi.variable} ${inter.variable} ${jetbrainsMono.variable} ${playfair.variable} ${poppins.variable}`}
     >
       <body>
         {children}

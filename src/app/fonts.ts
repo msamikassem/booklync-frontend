@@ -1,4 +1,4 @@
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono, Playfair_Display, Poppins } from "next/font/google";
 import localFont from "next/font/local";
 
 /**
@@ -31,5 +31,20 @@ export const satoshi = localFont({
     { path: "./fonts/satoshi-700.woff2", weight: "700", style: "normal" },
   ],
   variable: "--font-satoshi",
+  display: "swap",
+});
+
+// Curated webfonts offered to published sites (per-site font choice). Exposed as
+// CSS variables on <html>; the site renderer maps brand.font → these vars.
+export const playfair = Playfair_Display({
+  subsets: ["latin"],
+  variable: "--font-playfair",
+  display: "swap",
+});
+
+export const poppins = Poppins({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-poppins",
   display: "swap",
 });
