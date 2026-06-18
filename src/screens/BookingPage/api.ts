@@ -1,5 +1,6 @@
 import { apiFetch } from "../../auth/client";
 import type { components } from "../../api/schema";
+import type { AgentResponse, AgentUpdate } from "../../api/types";
 
 export type CustomDomain = components["schemas"]["CustomDomainResponse"];
 
@@ -23,4 +24,8 @@ export const bookingPageApi = {
   removeDomain: (agentId: number) =>
     apiFetch(`/agents/${agentId}/custom-domain`, { method: "DELETE" })
       .then(r => unwrap<{ message: string }>(r, "Could not remove the domain.")),
+
+  updateAgent: (agentId: number, body: AgentUpdate) =>
+    apiFetch(`/agents/${agentId}`, { method: "PUT", body: JSON.stringify(body) })
+      .then(r => unwrap<AgentResponse>(r, "Could not save the setting.")),
 };

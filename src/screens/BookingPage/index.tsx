@@ -66,9 +66,77 @@ export default function BookingPage() {
         )}
       </section>
 
+      {/* Booking confirmation — keyed by branch so switching resets cleanly. */}
+      <ConfirmationCard key={`conf-${activeAgent.id}`} agent={activeAgent} canManage={canManage} refetchAgents={refetchAgents} />
+
       {/* Custom domain — keyed by branch so switching branches resets cleanly. */}
       <DomainCard key={activeAgent.id} agent={activeAgent} canManage={canManage} refetchAgents={refetchAgents} />
     </div>
+  );
+}
+
+function ConfirmationCard({ agent, canManage, refetchAgents }: {
+  agent: AgentResponse; canManage: boolean; refetchAgents: () => void;
+}) {
+  const { toast } = useToast();
+  const [autoConfirm, setAutoConfirm] = useState(agent.public_booking_auto_confirm ?? false);
+
+  const save = useMutation({
+    mutationFn: (v: boolean) => bookingPageApi.updateAgent(agent.id, { public_booking_auto_confirm: v }),
+    onSuccess: (_d, v) => {
+      setAutoConfirm(v); refetchAgents();
+      toast({ description: v ? "New bookings will be auto-confirmed." : "New bookings will need your approval." });
+    },
+    onError: () => toast({ description: "Could not save the setting." }),
+  });
+
+  return (
+    <section className="bg-canvas rounded-xl border border-hairline p-5">
+      <h2 className="text-sm font-semibold text-ink mb-1">Online booking confirmation</h2>
+      <p className="text-sm text-muted mb-4">Choose what happens when a customer books from your site.</p>
+
+      <div className="space-y-2">
+        <Choice
+          active={!autoConfirm} disabled={!canManage || save.isPending}
+          title="Require my approval" desc="Bookings arrive as “pending”. You confirm them from the calendar. No text is sent until you do."
+          onClick={() => !autoConfirm || save.mutate(false)}
+        />
+        <Choice
+          active={autoConfirm} disabled={!canManage || save.isPending}
+          title="Auto-confirm bookings" desc="Bookings are confirmed instantly and the customer gets a confirmation text."
+          onClick={() => autoConfirm || save.mutate(true)}
+        />
+      </div>
+
+      {autoConfirm && (
+        <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+          Auto-confirm texts the customer automatically. We recommend turning on spam protection
+          (Turnstile) before using it on a public site.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function Choice({ active, disabled, title, desc, onClick }: {
+  active: boolean; disabled: boolean; title: string; desc: string; onClick: () => void;
+}) {
+  return (
+    <button
+      type="button" disabled={disabled} onClick={onClick}
+      className={cn(
+        "w-full text-left rounded-lg border px-4 py-3 transition-colors disabled:opacity-60",
+        active ? "border-primary bg-primary/5" : "border-hairline hover:bg-surface-soft",
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <span className={cn("h-4 w-4 rounded-full border-2 grid place-items-center shrink-0", active ? "border-primary" : "border-hairline")}>
+          {active && <span className="h-2 w-2 rounded-full bg-primary" />}
+        </span>
+        <span className="text-sm font-medium text-ink">{title}</span>
+      </div>
+      <p className="text-xs text-muted mt-1 ml-6">{desc}</p>
+    </button>
   );
 }
 

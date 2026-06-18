@@ -391,7 +391,7 @@ export interface paths {
         put?: never;
         /**
          * Upload a profile picture
-         * @description Upload a profile picture for an employee. Max size: 2MB.
+         * @description Upload a profile picture for an employee. Must be an image; max size: 2MB.
          */
         post: operations["upload_profile_picture_api_v1_employees__employee_id__profile_picture_post"];
         /** Remove the profile picture */
@@ -1240,6 +1240,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/appointments/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Book several services in one visit
+         * @description Book multiple services for one customer in a single visit.
+         *
+         *     The services in `items` are scheduled back-to-back starting at `start_time`
+         *     (in the order given), each with its own employee. Every line becomes its own
+         *     independent appointment; they are validated as a set and created atomically —
+         *     if any line is unbookable, none are created.
+         */
+        post: operations["create_appointments_batch_api_v1_appointments_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/appointments/{appointment_id}": {
         parameters: {
             query?: never;
@@ -1698,6 +1723,84 @@ export interface paths {
         get: operations["get_public_services_api_v1_public_business__slug__services_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/domain-slug/{hostname}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resolve a verified custom domain → its branch slug (no auth)
+         * @description Tiny lookup so `middleware.ts` can rewrite a custom domain onto the
+         *     ISR-cached `/b/{slug}` renderer (instead of an uncached per-request resolve).
+         *     Verified domains only.
+         */
+        get: operations["get_domain_slug_api_v1_public_domain_slug__hostname__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/site/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a branch's PUBLISHED website + identity + services in one call (no auth)
+         * @description One round trip for the public renderer. `published=False` (config null)
+         *     means the branch has no live site yet → the frontend falls back to the
+         *     built-in booking page.
+         */
+        get: operations["get_public_site_api_v1_public_site__slug__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/site/{slug}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a branch's DRAFT website for the editor preview (signed token, no auth) */
+        get: operations["get_public_site_draft_api_v1_public_site__slug__draft_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/appointments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a booking from a published site (no auth) */
+        post: operations["create_public_appointment_api_v1_public_appointments_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2472,6 +2575,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sites/{agent_id}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the editable site draft for a branch (creates a blank one on first access) */
+        get: operations["get_draft_api_v1_sites__agent_id__draft_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Replace the site draft config */
+        patch: operations["patch_draft_api_v1_sites__agent_id__draft_patch"];
+        trace?: never;
+    };
+    "/api/v1/sites/{agent_id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish the draft → live site */
+        post: operations["publish_site_api_v1_sites__agent_id__publish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sites/{agent_id}/preview-token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mint a short-lived token for the editor's live draft preview */
+        get: operations["get_preview_token_api_v1_sites__agent_id__preview_token_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sites/{agent_id}/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload a site image (logo, hero, gallery). Returns its public URL. */
+        post: operations["upload_asset_api_v1_sites__agent_id__assets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -2655,6 +2827,11 @@ export interface components {
              * @default false
              */
             tax_inclusive: boolean;
+            /**
+             * Public Booking Auto Confirm
+             * @default false
+             */
+            public_booking_auto_confirm: boolean;
             /** Active */
             active: boolean;
             /**
@@ -2721,6 +2898,8 @@ export interface components {
             tax_rate?: number | string | null;
             /** Tax Inclusive */
             tax_inclusive?: boolean | null;
+            /** Public Booking Auto Confirm */
+            public_booking_auto_confirm?: boolean | null;
         };
         /**
          * ApplyDiscountRequest
@@ -2834,11 +3013,27 @@ export interface components {
             source: string;
             /** Note */
             note?: string | null;
+            /** Booking Group Id */
+            booking_group_id?: string | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+        };
+        /**
+         * AppointmentItem
+         * @description One service line in a multi-service ("book several services in one visit")
+         *     request. Each line carries its own employee and optional variation; the
+         *     backend schedules the lines back-to-back in the order given.
+         */
+        AppointmentItem: {
+            /** Service Id */
+            service_id: number;
+            /** Variation Id */
+            variation_id?: number | null;
+            /** Employee Id */
+            employee_id: number;
         };
         /** AppointmentListResponse */
         AppointmentListResponse: {
@@ -2985,6 +3180,14 @@ export interface components {
             blocked_times: components["schemas"]["BlockedTimeResponse"][];
             /** Total */
             total: number;
+        };
+        /** Body_upload_asset_api_v1_sites__agent_id__assets_post */
+        Body_upload_asset_api_v1_sites__agent_id__assets_post: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
         };
         /** Body_upload_profile_picture_api_v1_employees__employee_id__profile_picture_post */
         Body_upload_profile_picture_api_v1_employees__employee_id__profile_picture_post: {
@@ -4015,6 +4218,34 @@ export interface components {
              */
             minutes_before: number;
         };
+        /**
+         * MultiAppointmentCreate
+         * @description Book several services for one customer in a single visit.
+         *
+         *     The services in `items` are scheduled back-to-back starting at `start_time`
+         *     (in the order given): the first runs at `start_time`, each subsequent service
+         *     begins when the previous one ends. Every line becomes its own independent
+         *     Appointment (own status / sale on completion); they are validated as a set
+         *     and committed atomically — if any line is unbookable, none are created.
+         *
+         *     end_time of each line is derived from its service/variation duration.
+         */
+        MultiAppointmentCreate: {
+            /** Agent Id */
+            agent_id: number;
+            /** Customer Id */
+            customer_id: number;
+            /**
+             * Start Time
+             * Format: date-time
+             */
+            start_time: string;
+            source: components["schemas"]["AppointmentSourceEnum"];
+            /** Note */
+            note?: string | null;
+            /** Items */
+            items: components["schemas"]["AppointmentItem"][];
+        };
         /** PackageCreditListResponse */
         PackageCreditListResponse: {
             /** Credits */
@@ -4126,6 +4357,15 @@ export interface components {
             /** Permissions */
             permissions: components["schemas"]["PermissionInfo"][];
         };
+        /** PreviewTokenResponse */
+        PreviewTokenResponse: {
+            /** Token */
+            token: string;
+            /** Preview Path */
+            preview_path: string;
+            /** Expires In Minutes */
+            expires_in_minutes: number;
+        };
         /** PublicAgentResponse */
         PublicAgentResponse: {
             /** Agent Name */
@@ -4141,6 +4381,58 @@ export interface components {
             /** Timezone */
             timezone: string;
         };
+        /** PublicBookingConfirmation */
+        PublicBookingConfirmation: {
+            /** Status */
+            status: string;
+            /**
+             * Start Time
+             * Format: date-time
+             */
+            start_time: string;
+            /** Start Time Local */
+            start_time_local?: string | null;
+            /** Service Name */
+            service_name?: string | null;
+            /** Employee Name */
+            employee_name?: string | null;
+            /** Branch Name */
+            branch_name: string;
+            /** Pending */
+            pending: boolean;
+        };
+        /**
+         * PublicBookingRequest
+         * @description Customer-submitted booking from a published site (unauthenticated).
+         *     Tenant/branch are resolved from `slug` — never trusted from the body.
+         */
+        PublicBookingRequest: {
+            /** Slug */
+            slug: string;
+            /** Service Id */
+            service_id: number;
+            /** Variation Id */
+            variation_id?: number | null;
+            /** Employee Id */
+            employee_id: number;
+            /**
+             * Start Time
+             * Format: date-time
+             */
+            start_time: string;
+            /** Customer Name */
+            customer_name: string;
+            /** Customer Phone */
+            customer_phone: string;
+            /** Customer Email */
+            customer_email?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Hp */
+            hp?: string | null;
+            /** Turnstile Token */
+            turnstile_token?: string | null;
+        };
         /** PublicServiceResponse */
         PublicServiceResponse: {
             /** Id */
@@ -4150,9 +4442,84 @@ export interface components {
             /** Description */
             description?: string | null;
             /** Duration Minutes */
-            duration_minutes: number;
+            duration_minutes?: number | null;
             /** Price */
-            price: number;
+            price?: number | null;
+        };
+        /**
+         * PublicSiteBranch
+         * @description Branch identity for the public renderer (mirrors PublicAgentResponse).
+         *     `agent_id` is needed by the booking widget to call the (already public)
+         *     availability + booking endpoints — it is not a secret.
+         */
+        PublicSiteBranch: {
+            /** Agent Id */
+            agent_id: number;
+            /** Agent Name */
+            agent_name: string;
+            /** Location Name */
+            location_name: string;
+            /** Phone Number */
+            phone_number: string;
+            /** Booking Page Slug */
+            booking_page_slug: string;
+            /** Business Name */
+            business_name: string;
+            /** Timezone */
+            timezone: string;
+        };
+        /**
+         * PublicSiteResponse
+         * @description Everything the public renderer needs in ONE round trip: branch identity, the
+         *     live service menu, and the published (or, in preview, draft) site config.
+         *
+         *     `published` is False when the branch has never published a site — the
+         *     frontend then falls back to the simple built-in booking page.
+         */
+        PublicSiteResponse: {
+            branch: components["schemas"]["PublicSiteBranch"];
+            /** Services */
+            services: components["schemas"]["PublicSiteService"][];
+            /** Config */
+            config?: Record<string, never> | null;
+            /** Published */
+            published: boolean;
+            /** Branding Removed */
+            branding_removed: boolean;
+            /**
+             * Preview
+             * @default false
+             */
+            preview: boolean;
+        };
+        /** PublicSiteService */
+        PublicSiteService: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /** Duration Minutes */
+            duration_minutes?: number | null;
+            /** Price */
+            price?: number | null;
+            /**
+             * Variations
+             * @default []
+             */
+            variations: components["schemas"]["PublicSiteVariation"][];
+        };
+        /** PublicSiteVariation */
+        PublicSiteVariation: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Duration Minutes */
+            duration_minutes?: number | null;
+            /** Price */
+            price?: number | null;
         };
         /**
          * RedeemRequest
@@ -4587,6 +4954,53 @@ export interface components {
             duration_minutes?: number | null;
             /** Sort Order */
             sort_order?: number | null;
+        };
+        /** SiteAssetResponse */
+        SiteAssetResponse: {
+            /** Url */
+            url: string;
+        };
+        /**
+         * SiteDraftResponse
+         * @description The editor's view of a branch site (draft + publish status).
+         */
+        SiteDraftResponse: {
+            /** Agent Id */
+            agent_id: number;
+            /** Theme Id */
+            theme_id?: string | null;
+            /** Draft Config */
+            draft_config: Record<string, never>;
+            /** Has Published */
+            has_published: boolean;
+            /** Published Version */
+            published_version: number;
+            /** Published At */
+            published_at?: string | null;
+            /** Branding Removed */
+            branding_removed: boolean;
+        };
+        /**
+         * SiteDraftUpdate
+         * @description PATCH body — replaces the whole draft config (the editor owns the document).
+         */
+        SiteDraftUpdate: {
+            /** Config */
+            config: Record<string, never>;
+            /** Theme Id */
+            theme_id?: string | null;
+        };
+        /** SitePublishResponse */
+        SitePublishResponse: {
+            /** Published Version */
+            published_version: number;
+            /**
+             * Published At
+             * Format: date-time
+             */
+            published_at: string;
+            /** Revalidated */
+            revalidated: boolean;
         };
         /**
          * SlotCheckResponse
@@ -7679,6 +8093,39 @@ export interface operations {
             };
         };
     };
+    create_appointments_batch_api_v1_appointments_batch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MultiAppointmentCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppointmentListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_appointment_api_v1_appointments__appointment_id__get: {
         parameters: {
             query?: never;
@@ -8333,6 +8780,135 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicServiceResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_domain_slug_api_v1_public_domain_slug__hostname__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hostname: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_public_site_api_v1_public_site__slug__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicSiteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_public_site_draft_api_v1_public_site__slug__draft_get: {
+        parameters: {
+            query: {
+                /** @description Signed preview token from /sites/{id}/preview-token */
+                token: string;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicSiteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_public_appointment_api_v1_public_appointments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicBookingRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicBookingConfirmation"];
                 };
             };
             /** @description Validation Error */
@@ -9777,6 +10353,169 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SaleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_draft_api_v1_sites__agent_id__draft_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_draft_api_v1_sites__agent_id__draft_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SiteDraftUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    publish_site_api_v1_sites__agent_id__publish_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SitePublishResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_preview_token_api_v1_sites__agent_id__preview_token_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewTokenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_asset_api_v1_sites__agent_id__assets_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_asset_api_v1_sites__agent_id__assets_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteAssetResponse"];
                 };
             };
             /** @description Validation Error */
